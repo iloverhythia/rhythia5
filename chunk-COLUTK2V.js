@@ -1,0 +1,1 @@
+import{a as o,b as r,d as i,e as m,f as t,g as e}from"./chunk-VJOWKP6D.js";import"./chunk-77ISA7WF.js";import"./chunk-6KSK6UX7.js";import"./chunk-WB5QILHO.js";import"./chunk-XJALFM7W.js";import"./chunk-KVPOG3KN.js";o();i("production");r.load();m.load();t();e.gameInit();

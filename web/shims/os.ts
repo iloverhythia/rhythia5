@@ -1,0 +1,12 @@
+export const homedir = () => "/home/player";
+export const tmpdir = () => "/tmp";
+export const platform = () => "linux";
+export const type = () => "Linux";
+export const release = () => "web";
+export const arch = () => "x64";
+export const hostname = () => "browser";
+export const cpus = () => Array.from({ length: navigator.hardwareConcurrency || 4 }, () => ({ model: "Browser CPU", speed: 0 }));
+export const totalmem = () => ((navigator as any).deviceMemory || 8) * 1073741824;
+export const freemem = () => totalmem() / 2;
+export const EOL = "\n";
+export default { homedir, tmpdir, platform, type, release, arch, hostname, cpus, totalmem, freemem, EOL };
