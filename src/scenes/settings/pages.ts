@@ -123,4 +123,3 @@ export function gameSettingToggle(
   };
 }
 
-export const settingsNavigation = { open: (id: string): void => {} };
