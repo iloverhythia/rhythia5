@@ -9,7 +9,7 @@ import { openDialog, openFolderDialog } from "nativefiledialog";
 export async function pickSSPMFile(): Promise<string | null> {
   try {
     const result = openDialog({
-      beatmap: "sspm",
+      beatmap: "sspm,rhm",
     });
     return result;
   } catch (e) {
@@ -29,17 +29,17 @@ export async function importFromDialog(deps: ImportDeps): Promise<void> {
   try {
     await Maps.ensure();
 
-    popup.startLoading("Select a .sspm file");
+    popup.startLoading("Select a map file");
     const filePath = await pickSSPMFile();
     if (!filePath) {
       popup.endLoading();
       return;
     }
 
-    if (!filePath.toLowerCase().endsWith(".sspm")) {
+    if (!/\.(sspm|rhm)$/i.test(filePath)) {
       popup.endLoading();
       const p = createPopup("error");
-      p.show("Please select a .sspm file");
+      p.show("Please select a .sspm or .rhm file");
       setTimeout(() => {
         p.hide();
         p.destroy();
@@ -103,11 +103,11 @@ export async function importFolder(deps: ImportFolderDeps): Promise<void> {
     const files = entries
       .filter((e) => e.isFile())
       .map((e) => e.name)
-      .filter((n) => n.toLowerCase().endsWith(".sspm"));
+      .filter((n) => /\.(sspm|rhm)$/i.test(n));
     if (files.length === 0) {
       deps.popup.endLoading();
       const p = createPopup("error");
-      p.show("No .sspm files found");
+      p.show("No .sspm or .rhm files found");
       setTimeout(() => {
         p.hide();
         p.destroy();
