@@ -1,5 +1,5 @@
 import { GetScreenHeight, GetScreenWidth } from "raylib";
-import { registerSettingsPage } from "../pages";
+import { extraToggle, registerSettingsPage } from "../pages";
 import { ConfigManager } from "../../../utils/configManager";
 import { applyWindowSettings } from "../../../atoms/sysutils/window";
 
@@ -39,6 +39,14 @@ registerSettingsPage({
         get: () => ConfigManager.getExtra("vsync", false),
         set: (value) => apply("vsync", value),
       },
+      extraToggle("maxFpsMode", "Max FPS mode", false, {
+        set: (value) => {
+          ConfigManager.setExtra("maxFpsMode", value);
+          if (value) ConfigManager.setExtra("vsync", false);
+          applyWindowSettings();
+        },
+      }),
+      extraToggle("autoMaximize", "Auto-Maximize", false),
       {
         kind: "toggle",
         label: "Minimize on Alt-Tab",

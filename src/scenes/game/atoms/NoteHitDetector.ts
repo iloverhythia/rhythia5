@@ -14,7 +14,7 @@ export interface NoteHitResult {
 export class NoteHitDetector {
   private hitNotes: Set<number> = new Set();
   private missedNotes: Map<number, number> = new Map();
-  private scheduledHitSounds: Map<number, number> = new Map(); 
+  private scheduledHitSounds: Map<number, [number, number, number]> = new Map(); 
   public hitWindowMs: number = 55;
   public hitboxSize: number = 1.14;
   public counterSpeed: boolean = true;
@@ -58,7 +58,7 @@ export class NoteHitDetector {
         this.hitNotes.add(noteIndex);
         this.combo++;
 
-        this.scheduledHitSounds.set(noteIndex, note[0]);
+        this.scheduledHitSounds.set(noteIndex, note);
         return { hit: true, missed: false, opacity: 0.3, newlyHit: true };
       }
     }
@@ -135,9 +135,9 @@ export class NoteHitDetector {
   }
 
   public checkAndPlayScheduledSounds(currentTime: number): void {
-    for (const [noteIndex, noteTime] of this.scheduledHitSounds.entries()) {
-      if (currentTime >= noteTime) {
-        playSoundEffect("hit");
+    for (const [noteIndex, note] of this.scheduledHitSounds.entries()) {
+      if (currentTime >= note[0]) {
+        playSoundEffect("hit", note[1] - 1);
         this.scheduledHitSounds.delete(noteIndex);
       }
     }

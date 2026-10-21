@@ -672,7 +672,7 @@ export class GameLogic {
     }
 
     if (result.newlyMissed) {
-      if (!this.previewMode) playSoundEffect("miss");
+      if (!this.previewMode) playSoundEffect("miss", note[1] - 1);
       if (!this.replayPlayback) this.healthModel.onNoteMiss();
       try {
         this.replayObserver?.recordNoteMiss?.(
