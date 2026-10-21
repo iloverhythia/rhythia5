@@ -123,3 +123,12 @@ export function gameSettingToggle(
   };
 }
 
+export type RowFlag = "settingsFavorites" | "settingsLocked";
+
+export const hasFlag = (flag: RowFlag, label: string): boolean =>
+  ConfigManager.getExtra<string[]>(flag, []).includes(label);
+
+export const toggleFlag = (flag: RowFlag, label: string): void => {
+  const list = ConfigManager.getExtra<string[]>(flag, []);
+  ConfigManager.setExtra(flag, list.includes(label) ? list.filter((l) => l !== label) : [...list, label]);
+};
