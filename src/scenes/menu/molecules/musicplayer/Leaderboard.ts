@@ -53,6 +53,7 @@ export class Leaderboard {
   private readonly scoreGap = 5;
   private readonly overlap = 24; 
   private hasLocalScores: boolean = false;
+  private static hideFailed: boolean = true;
   private hasOnlineScores: boolean = false;
   private localScoresCache: Score[] | null = null;
   private onlineScoresCache: Score[] | null = null;
@@ -243,6 +244,23 @@ export class Leaderboard {
     if (!this.currentMap || this.fadeProgress < 0.01) {
       this.toggleButtonHovered = false;
       return;
+    }
+    const hideFailedRect = this.getHideFailedBounds(
+      albumCenterX,
+      centerY,
+      albumSize
+    );
+    if (
+      IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+      this.isRankedOnline() &&
+      mousePos.x >= hideFailedRect.x &&
+      mousePos.x <= hideFailedRect.x + hideFailedRect.width &&
+      mousePos.y >= hideFailedRect.y &&
+      mousePos.y <= hideFailedRect.y + hideFailedRect.height
+    ) {
+      Leaderboard.hideFailed = !Leaderboard.hideFailed;
+      this.applyScores(this.onlineScoresCacheRaw ?? []);
+      this.suppressScoreClickFrames = 2;
     }
     if (this.scores.length === 0) {
       
@@ -475,6 +493,10 @@ export class Leaderboard {
     }
 
     
+    if (this.isRankedOnline()) {
+      this.drawHideFailedToggle(albumCenterX, centerY, albumSize);
+    }
+
     if (this.loading && this.scores.length === 0) {
       return;
     }
@@ -527,6 +549,7 @@ export class Leaderboard {
         a: 200 * this.fadeProgress * cardAnim,
       });
 
+      const alpha = 255 * this.fadeProgress * cardAnim;
       const rankColor =
         rank === 1
           ? { r: 255, g: 215, b: 0 }
@@ -535,141 +558,90 @@ export class Leaderboard {
           : rank === 3
           ? { r: 205, g: 127, b: 50 }
           : { r: 150, g: 150, b: 150 };
-      const innerPad = 20;
-      const contentPad = this.overlap + innerPad;
-      const rankX = cardX + contentPad + 25;
-      const nameFontSize = 20;
-      const rankFontSize = 24;
-      const detailsFontSize = 18;
-      const lineGapY = 6; 
-      const topLineH = Math.max(
-        measureText("A", nameFontSize, 1).height,
-        measureText("A", rankFontSize, 1).height
-      );
-      const detailsH = measureText("A", detailsFontSize, 1).height;
-      const blockH = topLineH + lineGapY + detailsH;
-      const firstLineY = cardY + Math.max(0, (cardH - blockH) / 2);
+      const midY = cardY + cardH / 2;
+      const rankX = cardX + this.overlap + 12;
+      drawText(`#${rank}`, Vector2(rankX, midY - 11), 20, {
+        ...rankColor,
+        a: alpha,
+      });
 
-      drawText(
-        `#${rank}`,
-        Vector2(rankX, firstLineY + 5),
-        rankFontSize,
-        { ...rankColor, a: 255 * this.fadeProgress * cardAnim },
-        "left"
-      );
-
-      
       const username = score.username || "Unknown";
-      const nameX = rankX + 42;
-      const rightEdge = cardX + cardW - 15;
-      let reservedRight = 0;
-      if (score.awarded_sp && score.awarded_sp > 0) {
-        const spLabel = `+${score.awarded_sp} SP`;
-        const spSize = measureText(spLabel, 20, 1);
-        reservedRight += spSize.width + 12;
+      const avatarSize = 32;
+      const avatarX = rankX + 34;
+      if (score.avatar_url) {
+        drawSprite(
+          score.avatar_url,
+          Vector2(avatarX, midY - avatarSize / 2),
+          Vector2(avatarSize, avatarSize),
+          { r: 255, g: 255, b: 255, a: alpha }
+        );
+      } else {
+        drawSprite(
+          "/circle.png",
+          Vector2(avatarX, midY - avatarSize / 2),
+          Vector2(avatarSize, avatarSize),
+          { r: 170, g: 120, b: 190, a: alpha }
+        );
+        drawText(
+          username.charAt(0).toUpperCase(),
+          Vector2(avatarX + avatarSize / 2, midY - 9),
+          18,
+          { r: 255, g: 255, b: 255, a: alpha },
+          "center"
+        );
       }
-      const maxTitleWidth = Math.max(0, rightEdge - reservedRight - nameX);
-      const fitText = (text: string, size: number, maxW: number): string => {
-        if (maxW <= 0) return "";
-        if (measureText(text, size, 1).width <= maxW) return text;
-        let low = 0,
-          high = text.length,
-          best = 0;
-        while (low <= high) {
-          const mid = Math.floor((low + high) / 2);
-          const t = text.slice(0, mid) + (mid < text.length ? "..." : "");
-          const w = measureText(t, size, 1).width;
-          if (w <= maxW) {
-            best = mid;
-            low = mid + 1;
-          } else {
-            high = mid - 1;
-          }
-        }
-        return text.slice(0, best) + (best < text.length ? "..." : "");
-      };
-      const fittedName = fitText(username, 20, maxTitleWidth);
-      
-      drawText(
-        fittedName,
-        Vector2(nameX, firstLineY),
-        nameFontSize,
-        { r: 220, g: 220, b: 220, a: 255 * this.fadeProgress * cardAnim },
-        "left"
-      );
 
-      
-      
-      const detailsY = firstLineY + topLineH + lineGapY;
-      const fontSize = 18;
-      const gap = 8;
-      let cursorX = nameX;
-      const neutral = (a: number) => ({ r: 200, g: 200, b: 200, a });
-      const redMatte = (a: number) => ({ r: 190, g: 80, b: 80, a });
-      const greenMatte = (a: number) => ({ r: 90, g: 180, b: 110, a });
-      const blueMatte = (a: number) => ({ r: 110, g: 160, b: 220, a });
-      const drawSeg = (
-        text: string,
-        color: { r: number; g: number; b: number; a: number }
-      ) => {
-        if (!text) return;
-        drawText(text, Vector2(cursorX, detailsY), fontSize, color, "left");
-        const size = measureText(text, fontSize, 1);
-        cursorX += size.width + gap;
-      };
-      if (score.spin) {
-        drawSeg("SPIN", neutral(255 * this.fadeProgress * cardAnim));
-      }
-      
       const totalNotes =
         this.currentMap?.noteCount ?? this.currentMap?.notes?.length ?? 0;
-      const missesVal = Math.max(0, score.misses ?? 0);
-      let hitsVal: number | null;
-      let accStr = "";
-      if (this.viewMode === "local" && typeof score.localHits === "number") {
-        hitsVal = Math.max(0, score.localHits);
-        const attempted = hitsVal + missesVal;
-        if (attempted > 0) accStr = ((hitsVal / attempted) * 100).toFixed(1);
-      } else {
-        hitsVal = totalNotes > 0 ? Math.max(0, totalNotes - missesVal) : null;
-        if (totalNotes > 0 && hitsVal !== null) {
-          accStr = ((hitsVal / totalNotes) * 100).toFixed(1);
-        }
-      }
+      const misses = Math.max(0, score.misses ?? 0);
+      const hits =
+        this.viewMode === "local" && typeof score.localHits === "number"
+          ? score.localHits
+          : totalNotes - misses;
+      const attempted =
+        this.viewMode === "local" ? hits + misses : totalNotes;
+      const accuracy = attempted > 0 ? (hits / attempted) * 100 : 0;
+      const speed = typeof score.speed === "number" ? score.speed : 1;
+      const details = [
+        `${accuracy.toFixed(2)}%`,
+        `${misses} misses`,
+        `${speed.toFixed(2).replace(/0$/, "")}x`,
+      ].join(" • ");
 
-      
-      drawSeg(String(missesVal), neutral(255 * this.fadeProgress * cardAnim));
-      drawSeg("X", redMatte(255 * this.fadeProgress * cardAnim));
-      if (hitsVal !== null) {
-        drawSeg(String(hitsVal), neutral(255 * this.fadeProgress * cardAnim));
-        drawSeg("O", greenMatte(255 * this.fadeProgress * cardAnim));
-      }
-      if (accStr) {
-        drawSeg(accStr, neutral(255 * this.fadeProgress * cardAnim));
-        drawSeg("%", blueMatte(255 * this.fadeProgress * cardAnim));
-      }
-
-      if (score.awarded_sp !== null && score.awarded_sp > 0) {
-        drawText(
-          `+${score.awarded_sp} SP`,
-          Vector2(cardX + cardW - 15, firstLineY),
-          nameFontSize,
-          { r: 100, g: 200, b: 100, a: 255 * this.fadeProgress * cardAnim },
-          "right"
+      const gradeSize = 30;
+      const grade = ["SS", "S", "A", "B", "C", "D"][
+        [100, 98, 95, 90, 85, 80].findIndex((t) => accuracy >= t)
+      ];
+      if (grade) {
+        drawSprite(
+          `/score_${grade}.png`,
+          Vector2(cardX + cardW - 14 - gradeSize, midY - gradeSize / 2),
+          Vector2(gradeSize, gradeSize),
+          { r: 255, g: 255, b: 255, a: alpha }
         );
       }
-      if (score.speed !== null && score.speed !== 1) {
-        const speedVal = typeof score.speed === "number" ? score.speed : 1;
-        const speedRoundedUp = Math.ceil(speedVal * 100) / 100;
-        const speedLabel = `${speedRoundedUp.toFixed(2)}x`;
-        drawText(
-          speedLabel,
-          Vector2(cardX + cardW - 15, detailsY),
-          18,
-          { r: 200, g: 200, b: 200, a: 220 * this.fadeProgress * cardAnim },
-          "right"
-        );
+
+      const nameX = avatarX + avatarSize + 10;
+      const maxNameWidth = cardX + cardW - gradeSize - 24 - nameX;
+      let fittedName = username;
+      while (
+        fittedName.length > 1 &&
+        measureText(fittedName, 18, 1).width > maxNameWidth
+      ) {
+        fittedName = fittedName.slice(0, -1);
       }
+      drawText(fittedName, Vector2(nameX, midY - 20), 18, {
+        r: 235,
+        g: 235,
+        b: 235,
+        a: alpha,
+      });
+      drawText(details, Vector2(nameX, midY + 3), 14, {
+        r: 170,
+        g: 170,
+        b: 170,
+        a: alpha,
+      });
     });
 
     
@@ -688,6 +660,14 @@ export class Leaderboard {
         scoreGap
       );
     }
+  }
+
+  private isRankedOnline(): boolean {
+    return (
+      this.viewMode === "online" &&
+      this.currentMap?.onlineStatus === "RANKED" &&
+      !!this.onlineScoresCacheRaw?.length
+    );
   }
 
   private setViewMode(mode: LeaderboardViewMode): void {
@@ -719,22 +699,54 @@ export class Leaderboard {
     }
   }
 
-  private getToggleButtonBounds(
+  private getHideFailedBounds(
     albumCenterX: number,
     centerY: number,
     albumSize: number
   ): ButtonBounds {
-    const albumRight = albumCenterX + albumSize / 2;
-    const spacing = 24;
-    const leaderboardX = albumRight + spacing;
-    const startY = centerY - albumSize / 2;
-    const scoreWidth = 300;
-    const buttonWidth = 150;
-    const buttonHeight = 32;
-    const buttonX = leaderboardX + scoreWidth - buttonWidth;
-    const buttonY = startY - 6;
+    const visibleCount = Math.max(1, this.scores.length);
+    const blockHeight =
+      visibleCount * this.scoreHeight + (visibleCount - 1) * this.scoreGap;
+    const leaderboardX = albumCenterX + albumSize / 2 - this.overlap;
+    return {
+      x: leaderboardX + this.scoreWidth - 110,
+      y: centerY - blockHeight / 2 - 32,
+      width: 110,
+      height: 22,
+    };
+  }
 
-    return { x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight };
+  private drawHideFailedToggle(
+    albumCenterX: number,
+    centerY: number,
+    albumSize: number
+  ): void {
+    const r = this.getHideFailedBounds(albumCenterX, centerY, albumSize);
+    const alpha = 255 * this.fadeProgress;
+    const trackW = 40;
+    const trackX = r.x + r.width - trackW;
+    drawText("Hide failed", Vector2(trackX - 8, r.y + 3), 15, {
+      r: 220,
+      g: 220,
+      b: 220,
+      a: alpha,
+    }, "right");
+    drawSprite("/solid.png", Vector2(trackX, r.y), Vector2(trackW, r.height), {
+      ...(Leaderboard.hideFailed
+        ? { r: 90, g: 90, b: 95 }
+        : { r: 45, g: 45, b: 50 }),
+      a: alpha,
+    });
+    const knob = r.height - 6;
+    drawSprite(
+      "/solid.png",
+      Vector2(
+        Leaderboard.hideFailed ? trackX + trackW - knob - 3 : trackX + 3,
+        r.y + 3
+      ),
+      Vector2(knob, knob),
+      { r: 255, g: 255, b: 255, a: alpha }
+    );
   }
 
   private loadLocalScores(mapId: string): void {
@@ -763,7 +775,10 @@ export class Leaderboard {
     }
   }
 
-  private applyScores(scores: Score[]): void {
+  private applyScores(source: Score[]): void {
+    const scores = Leaderboard.hideFailed
+      ? source.filter((s) => s.passed !== false)
+      : source;
     const prevAnims = this.cardAnimations ? this.cardAnimations.slice() : [];
     const prevHover = this.hoverAnimations ? this.hoverAnimations.slice() : [];
     this.scores = scores;

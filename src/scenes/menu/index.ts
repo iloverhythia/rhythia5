@@ -82,9 +82,18 @@ import * as fsPromises from "fs/promises";
 import * as path from "path";
 import { openDialog } from "nativefiledialog";
 import { loginWithDiscord } from "../../utils/auth/supabase";
-import { loadFavoriteIds } from "../../utils/storage/favorites";
+import { isFavorite, loadFavoriteIds } from "../../utils/storage/favorites";
+import {
+  getCollectionsOf,
+  loadCollections,
+  toggleInCollection,
+} from "../../utils/storage/collections";
+import { toastManager } from "../../utils/toastManager";
+import { LobbyScene } from "../lobby";
 import { Maps } from "../../utils/maps";
 import { applyShiftModifiers as kbApplyShift } from "../../utils/keyboard";
+
+const LOCAL_LISTS = ["Favorites", "Collections"];
 
 export class MenuScene extends Scene {
   sceneName: string = "Menu";
@@ -300,6 +309,15 @@ export class MenuScene extends Scene {
       this.leaderboardsDrawer.toggle();
     };
 
+    this.topBar.onMultiplayerClick = () => {
+      Rhythia.goToScene(new LobbyScene(), true, true);
+    };
+
+    this.topBar.onCollectionClick = () => this.handleAddToCollection();
+    this.topBar.onFavoriteClick = () => this.musicPlayer.toggleCurrentFavorite();
+    this.topBar.isFavorite = () => this.musicPlayer.isCurrentMapFavorite();
+    this.musicPlayer.setCollectionHandler(() => this.handleAddToCollection());
+
     this.topBar.onImportFolderClick = () => {
       void this.handleImportFolder();
     };
@@ -366,7 +384,7 @@ export class MenuScene extends Scene {
 
     const savedTab = ConfigManager.get().selectedTab || "Downloaded";
 
-    if (savedTab === "Downloaded" || savedTab === "Favorites") {
+    if (savedTab === "Downloaded" || LOCAL_LISTS.includes(savedTab)) {
       this.drawerFilters.setSortingEnabled(true);
     } else {
       this.drawerFilters.setSortingEnabled(false);
@@ -390,6 +408,7 @@ export class MenuScene extends Scene {
         await this.loadBeatmaps(1);
         break;
       case "Favorites":
+      case "Collections":
         await this.loadFavoriteMaps();
         break;
       case "Downloaded":
@@ -539,7 +558,7 @@ export class MenuScene extends Scene {
     }
 
     this.drawerFilters.setSortingEnabled(
-      tabTitle === "Downloaded" || tabTitle === "Favorites",
+      tabTitle === "Downloaded" || LOCAL_LISTS.includes(tabTitle),
     );
 
     this.clearAllMaps();
@@ -551,12 +570,12 @@ export class MenuScene extends Scene {
     }
 
     this.currentPage = 1;
-    this.hasMorePages = tabTitle !== "Favorites";
+    this.hasMorePages = !LOCAL_LISTS.includes(tabTitle);
     this.isLoadingMore = false;
 
     if (tabTitle === "Downloaded") {
       this.loadDownloadedMaps();
-    } else if (tabTitle === "Favorites") {
+    } else if (LOCAL_LISTS.includes(tabTitle)) {
       this.loadFavoriteMaps();
     } else {
       this.loadBeatmaps(1);
@@ -568,7 +587,10 @@ export class MenuScene extends Scene {
       this.popup.startLoading("Loading favorites...");
       await new Promise((r) => setTimeout(r, 100));
 
-      const favIds: string[] = loadFavoriteIds();
+      const favIds: string[] =
+        this.currentTab === "Collections"
+          ? [...Object.values(loadCollections()).flat(), ...loadFavoriteIds()]
+          : loadFavoriteIds();
       let source: BeatmapData[] = [];
 
       if (this.allDownloadedBeatmaps.length > 0) {
@@ -624,7 +646,13 @@ export class MenuScene extends Scene {
       if (this.currentSearchTerm && this.currentSearchTerm.trim().length > 0) {
         const searchTerm = this.currentSearchTerm.trim().toLowerCase();
         const title = (map.title || "").toLowerCase();
-        passesText = title.includes(searchTerm);
+        passesText =
+          title.includes(searchTerm) ||
+          (this.currentTab === "Collections" &&
+            [
+              ...getCollectionsOf(String(map.id)),
+              ...(isFavorite(String(map.id)) ? ["Favorites"] : []),
+            ].some((name) => name.toLowerCase().includes(searchTerm)));
       }
 
       return passesStars && passesDuration && passesText;
@@ -669,7 +697,7 @@ export class MenuScene extends Scene {
       this.loadBeatmaps(1);
     } else if (this.currentTab === "Downloaded") {
       this.filterDownloadedMaps(minStars, maxStars);
-    } else if (this.currentTab === "Favorites") {
+    } else if (LOCAL_LISTS.includes(this.currentTab)) {
       this.filterFavoriteMaps();
     }
   }
@@ -876,7 +904,7 @@ export class MenuScene extends Scene {
       this.loadBeatmaps(1);
     } else if (this.currentTab === "Downloaded") {
       this.filterDownloadedMaps();
-    } else if (this.currentTab === "Favorites") {
+    } else if (LOCAL_LISTS.includes(this.currentTab)) {
       this.filterFavoriteMaps();
     }
   }
@@ -892,7 +920,7 @@ export class MenuScene extends Scene {
       this.filterDownloadedMaps();
       return;
     }
-    if (this.currentTab === "Favorites") {
+    if (LOCAL_LISTS.includes(this.currentTab)) {
       this.filterFavoriteMaps();
       return;
     }
@@ -922,7 +950,7 @@ export class MenuScene extends Scene {
       this.loadBeatmaps(1);
     } else if (this.currentTab === "Downloaded") {
       this.filterDownloadedMaps();
-    } else if (this.currentTab === "Favorites") {
+    } else if (LOCAL_LISTS.includes(this.currentTab)) {
       this.filterFavoriteMaps();
     }
   }
@@ -1168,7 +1196,7 @@ export class MenuScene extends Scene {
       this.isLoadingMore ||
       !this.hasMorePages ||
       this.currentTab === "Downloaded" ||
-      this.currentTab === "Favorites"
+      LOCAL_LISTS.includes(this.currentTab)
     ) {
       return;
     }
@@ -1297,7 +1325,7 @@ export class MenuScene extends Scene {
     this.allFavoriteBeatmaps = this.allFavoriteBeatmaps.filter(
       (m) => String(m.id) !== idStr,
     );
-    if (this.currentTab === "Downloaded" || this.currentTab === "Favorites") {
+    if (this.currentTab === "Downloaded" || LOCAL_LISTS.includes(this.currentTab)) {
       this.allBeatmaps = this.allBeatmaps.filter((m) => String(m.id) !== idStr);
       this.currentMaps = this.currentMaps.filter((m) => String(m.id) !== idStr);
     }
@@ -1312,7 +1340,7 @@ export class MenuScene extends Scene {
       MapButton.clearAllButtons();
       this.allDownloadedBeatmaps = [];
       await this.loadDownloadedMaps();
-    } else if (this.currentTab === "Favorites") {
+    } else if (LOCAL_LISTS.includes(this.currentTab)) {
       this.clearAllMaps();
       MapButton.clearAllButtons();
       this.loadFavoriteMaps();
@@ -1527,8 +1555,31 @@ export class MenuScene extends Scene {
     return drawerOpen || resultsBlocking || menuOpen;
   }
 
+  private handleAddToCollection(): void {
+    const mapId = this.lastSelectedOnlineId || this.selectedMap?.id;
+    if (!mapId) {
+      toastManager.show("Select a map first");
+      return;
+    }
+    createPopup("prompt").showPrompt({
+      message: "Add to collection",
+      placeholder: "Collection name",
+      initialValue: getCollectionsOf(mapId)[0] ?? "",
+      confirmText: "Save",
+      onConfirm: (value) => {
+        const name = value.trim();
+        if (!name) return;
+        const added = toggleInCollection(name, mapId);
+        toastManager.show(
+          added ? `Added to ${name}` : `Removed from ${name}`,
+        );
+        this.refreshFavoritesIfActive();
+      },
+    });
+  }
+
   public refreshFavoritesIfActive(): void {
-    if (this.currentTab === "Favorites") {
+    if (LOCAL_LISTS.includes(this.currentTab)) {
       this.clearAllMaps();
       this.loadFavoriteMaps();
     }

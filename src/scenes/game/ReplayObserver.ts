@@ -3,6 +3,7 @@ import * as path from "path";
 import { ConfigManager } from "../../utils/configManager";
 import { SoundSpaceMemoryMap } from "../../utils/storage/ssmm";
 import { ModeManager } from "./modes";
+import AnonymousMode from "./modes/AnonymousMode";
 import { encodeRRE, ReplayCursorSample, ReplayNoteHit } from "../../utils/replays";
 
 type CursorSample = ReplayCursorSample;
@@ -80,7 +81,11 @@ export class ReplayObserver {
 
   public saveToDisk(): string | null {
     try {
-      if (!this.hasAnyData) return null;
+      if (
+        !this.hasAnyData ||
+        ModeManager.getActiveModeIds().includes(AnonymousMode.id)
+      )
+        return null;
 
       const appDataDir = ConfigManager.getAppDataDir();
       const replaysDir = path.join(appDataDir, "replays");

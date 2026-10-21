@@ -4,9 +4,12 @@ import {
   type User,
 } from "@supabase/supabase-js";
 import { exec } from "child_process";
+import { createHash } from "crypto";
 import express from "express";
 import type { Server } from "http";
 import { ProfileManager } from "../profileManager";
+import { toastManager } from "../toastManager";
+import { createPopup } from "../../scenes/menu/atoms/Popup";
 
 const SUPABASE_SESSION_FIELD = "supabaseSession" as const;
 const SUPABASE_AUTH_PORT = 9001;
@@ -281,6 +284,92 @@ export async function loginWithDiscord(
       rejectOnce(err);
     }
   });
+}
+
+type AccountResponse = {
+  error?: string;
+  session?: string;
+  verificationPollToken?: string;
+};
+
+async function rhythiaApi(name: string, body: object): Promise<AccountResponse> {
+  const response = await fetch(`https://production.rhythia.com/api/${name}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return response.json();
+}
+
+export async function loginWithPassword(
+  login: string,
+  password: string
+): Promise<void> {
+  const passwordProof = createHash("sha256")
+    .update(`rhythia-password-v1\0${password}`)
+    .digest("hex");
+  let result = await rhythiaApi("loginAccount", {
+    login,
+    passwordProof,
+    client: "game",
+  });
+
+  const pollToken = result.verificationPollToken;
+  if (pollToken && !result.session) {
+    toastManager.show("Check your email to confirm this login", {
+      duration: 8,
+    });
+  }
+  while (pollToken && !result.session && !result.error) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    result = await rhythiaApi("profileCredentials", {
+      action: "poll_login_verification",
+      pollToken,
+    });
+  }
+
+  if (!result.session) {
+    throw new Error(result.error || "Login failed.");
+  }
+
+  ensureProfileLoaded();
+  ProfileManager.update({
+    email: login,
+    token: result.session,
+    isLoggedIn: true,
+    supabaseSession: undefined,
+  });
+  ProfileManager.save();
+}
+
+export async function promptPasswordLogin(): Promise<boolean> {
+  const popup = createPopup("prompt");
+  const ask = (message: string, masked?: boolean) =>
+    new Promise<string | null>((resolve) =>
+      popup.showPrompt({
+        message,
+        masked,
+        maxLength: 128,
+        confirmText: "Next",
+        onConfirm: resolve,
+        onCancel: () => resolve(null),
+      })
+    );
+
+  const login = (await ask("Username or email"))?.trim();
+  const password = login ? await ask("Password", true) : null;
+  popup.destroy();
+  if (!login || !password) return false;
+
+  try {
+    await loginWithPassword(login, password);
+    toastManager.show("Logged in!");
+    return true;
+  } catch (error) {
+    toastManager.show((error as Error).message, {
+      color: { r: 255, g: 120, b: 120, a: 255 },
+    });
+    return false;
+  }
 }
 
 export async function loginGuest(): Promise<User | null> {

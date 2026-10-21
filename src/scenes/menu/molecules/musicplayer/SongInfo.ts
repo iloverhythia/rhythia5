@@ -112,29 +112,28 @@ export class SongInfo {
 
     const author = this.currentMap.mappers?.join(", ") || "Unknown Author";
     const maxAuthorLength = 40;
-    const authorText = `mapped by ${author}`;
+    const authorText = `Mapped by ${author}`;
     const displayAuthor =
       authorText.length > maxAuthorLength
         ? authorText.substring(0, maxAuthorLength - 3) + "..."
         : authorText;
+    const diffName =
+      (this.currentMap as any).customDifficultyName?.trim() || "N/A";
 
     drawText(
-      displayAuthor,
-      Vector2(textX, titleY + 48),
+      `< ${diffName} >`,
+      Vector2(textX, titleY + 54),
       28,
-      { r: 200, g: 200, b: 200, a: this.fadeProgress * 255 },
+      { r: 255, g: 255, b: 255, a: this.fadeProgress * 255 },
       align,
     );
 
-    const diffName = (this.currentMap as any).customDifficultyName || "";
-    if (diffName && diffName.trim()) {
-      drawText(
-        `< ${diffName.trim()} >`,
-        Vector2(textX, titleY + 84),
-        34,
-        { r: 230, g: 230, b: 230, a: this.fadeProgress * 255 },
-        align,
-      );
-    }
+    drawText(
+      displayAuthor,
+      Vector2(textX, titleY + 88),
+      28,
+      { r: 150, g: 150, b: 150, a: this.fadeProgress * 255 },
+      align,
+    );
   }
 }

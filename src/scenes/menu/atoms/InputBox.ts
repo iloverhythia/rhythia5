@@ -46,6 +46,7 @@ export interface InputBoxProps {
   initialValue?: string;
   maxLength?: number;
   fontSize?: number;
+  masked?: boolean;
   onValueChange?: (value: string) => void;
   onEnter?: (value: string) => void;
   onFocus?: () => void;
@@ -427,8 +428,12 @@ export class InputBox {
     this.cursorPosition = this.selectionEnd;
   }
 
+  private get shownValue(): string {
+    return this.props.masked ? "*".repeat(this.value.length) : this.value;
+  }
+
   private copySelection(): void {
-    if (this.hasSelection()) {
+    if (this.hasSelection() && !this.props.masked) {
       const selectedText = this.getSelectedText();
       SetClipboardText(selectedText);
     }
@@ -522,14 +527,14 @@ export class InputBox {
   }
 
   private getCharacterIndexFromX(x: number): number {
-    if (this.value.length === 0) return 0;
+    if (this.shownValue.length === 0) return 0;
 
     const fontSize = this.props.fontSize!;
     let closestIndex = 0;
     let closestDistance = Math.abs(x);
 
-    for (let i = 0; i <= this.value.length; i++) {
-      const textUpToIndex = this.value.slice(0, i);
+    for (let i = 0; i <= this.shownValue.length; i++) {
+      const textUpToIndex = this.shownValue.slice(0, i);
       const font = GuiGetFont();
       const textSize = MeasureTextEx(font, textUpToIndex, fontSize, 1);
       const distance = Math.abs(x - textSize.x);
@@ -540,7 +545,7 @@ export class InputBox {
       }
     }
 
-    return Math.max(0, Math.min(this.value.length, closestIndex));
+    return Math.max(0, Math.min(this.shownValue.length, closestIndex));
   }
 
   private setFocus(focused: boolean): void {
@@ -690,8 +695,8 @@ export class InputBox {
       this.drawSelection();
     }
 
-    const displayText = this.value || placeholder || "";
-    const isPlaceholder = this.value.length === 0 && placeholder;
+    const displayText = this.shownValue || placeholder || "";
+    const isPlaceholder = this.shownValue.length === 0 && placeholder;
     const textColor = isPlaceholder
       ? { r: 120, g: 120, b: 120, a: this.fadeProgress * 255 }
       : { r: 255, g: 255, b: 255, a: this.fadeProgress * 255 };
@@ -720,8 +725,8 @@ export class InputBox {
     const start = Math.min(this.selectionStart, this.selectionEnd);
     const end = Math.max(this.selectionStart, this.selectionEnd);
 
-    const textToStart = this.value.slice(0, start);
-    const selectedText = this.value.slice(start, end);
+    const textToStart = this.shownValue.slice(0, start);
+    const selectedText = this.shownValue.slice(start, end);
 
     const font = GuiGetFont();
     const startTextSize = MeasureTextEx(font, textToStart, actualFontSize, 1);
@@ -747,7 +752,7 @@ export class InputBox {
     const { position, fontSize } = this.props;
     const actualFontSize = fontSize!;
 
-    const textToCursor = this.value.slice(0, this.cursorPosition);
+    const textToCursor = this.shownValue.slice(0, this.cursorPosition);
     const font = GuiGetFont();
     const textSize = MeasureTextEx(font, textToCursor, actualFontSize, 1);
     const cursorX = position.x + this.padding + textSize.x;

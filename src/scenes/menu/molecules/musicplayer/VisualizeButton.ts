@@ -5,6 +5,8 @@ export class VisualizeButton {
   private hovered: boolean = false;
   private readonly size: number = 65;
 
+  constructor(private icon: string = "/icons/eye.png") {}
+
   public update(mousePos: Vector2, x: number, y: number): boolean {
     this.hovered =
       mousePos.x >= x &&
@@ -39,7 +41,7 @@ export class VisualizeButton {
       ? { r: 255, g: 255, b: 255, a: 255 }
       : { r: 230, g: 230, b: 230, a: 255 };
     drawSprite(
-      "/eye.png",
+      this.icon,
       Vector2(centerX - iconSize / 2, centerY - iconSize / 2),
       Vector2(iconSize, iconSize),
       iconColor
