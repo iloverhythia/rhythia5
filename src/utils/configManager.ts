@@ -41,6 +41,7 @@ type BaseGameConfig = {
   durationFilterMax: number;
   alternativeViewMode?: boolean;
   selectedTab?: string;
+  extras?: Record<string, unknown>;
   renderScale: number;
   renderViewportMode?: "fit" | "cover" | "stretch";
   gameWindow: number;
@@ -527,6 +528,15 @@ export class ConfigManager {
   }
 
   
+  static getExtra<T>(key: string, fallback: T): T {
+    return (this.config.extras?.[key] as T) ?? fallback;
+  }
+
+  static setExtra(key: string, value: unknown): void {
+    this.update({ extras: { ...this.config.extras, [key]: value } });
+    this.save();
+  }
+
   static setSelectedTab(tab: string): void {
     this.update({ selectedTab: tab });
     this.save();
