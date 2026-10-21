@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import {
   Color,
   DrawLine3D,
@@ -8,6 +9,8 @@ import {
   rlRotatef,
   rlScalef,
   rlTranslatef,
+  rlDisableBackfaceCulling,
+  rlEnableBackfaceCulling,
 } from "raylib";
 import {
   BaseNoteRenderer,
@@ -23,6 +26,7 @@ export interface NoteMesh {
   fill: number;
   depth: number;
   bevel: number;
+  bulge?: number;
 }
 
 type Triangle = { a: Vector3; b: Vector3; c: Vector3; shade: number };
@@ -31,6 +35,36 @@ const DEPTH_SCALE = 0.32;
 const OUTLINE_COLOR = { r: 0, g: 230, b: 255, a: 255 };
 const LIGHT = { x: -0.3 / 1.118, y: -0.4 / 1.118, z: -1 / 1.118 };
 const meshCache = new Map<string, Triangle[]>();
+
+function lightOf(a: Vector3, b: Vector3, c: Vector3) {
+  const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const v = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+  const n = { x: u.y * v.z - u.z * v.y, y: u.z * v.x - u.x * v.z, z: u.x * v.y - u.y * v.x };
+  const length = Math.hypot(n.x, n.y, n.z);
+  return { n, length, light: (n.x * LIGHT.x + n.y * LIGHT.y + n.z * LIGHT.z) / length };
+}
+
+const shadeOf = (light: number) => Math.min(1, Math.max(0.2, 0.25 + 0.85 * light));
+
+function loadObj(file: string): Triangle[] {
+  const verts: Vector3[] = [];
+  const faces: Vector3[][] = [];
+  fs.readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .forEach((line: string) => {
+      const [cmd, ...args] = line.trim().split(/\s+/);
+      if (cmd === "v") verts.push(Vector3(+args[0], -Number(args[1]), -Number(args[2])));
+      if (cmd === "f") faces.push(args.map((arg) => verts[parseInt(arg) < 0 ? verts.length + parseInt(arg) : parseInt(arg) - 1]));
+    });
+  const extent = 2 * verts.reduce((max, p) => Math.max(max, Math.abs(p.x), Math.abs(p.y)), 0) || 1;
+  const fit = (p: Vector3) => Vector3(p.x / extent, p.y / extent, p.z / extent);
+  return faces.flatMap((face) =>
+    face.slice(2).map((p, i) => {
+      const [a, b, c] = [face[0], face[i + 1], p].map(fit);
+      return { a, b, c, shade: shadeOf(Math.abs(lightOf(a, b, c).light) || 0) };
+    })
+  );
+}
 
 function buildOutline(corners: number, rounding: number): { x: number; y: number }[] {
   const offset = -Math.PI / 2 + (corners % 2 === 0 ? Math.PI / corners : 0);
@@ -79,22 +113,18 @@ function buildMesh(mesh: NoteMesh): Triangle[] {
 
   const triangles: Triangle[] = [];
   const add = (a: Vector3, b: Vector3, c: Vector3, inward = false) => {
-    const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
-    const v = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
-    const n = { x: u.y * v.z - u.z * v.y, y: u.z * v.x - u.x * v.z, z: u.x * v.y - u.y * v.x };
-    const length = Math.hypot(n.x, n.y, n.z);
+    const { n, length, light } = lightOf(a, b, c);
     if (length < 1e-9) return;
     const cx = a.x + b.x + c.x;
     const cy = a.y + b.y + c.y;
     const cz = a.z + b.z + c.z;
     const facing = inward ? -(cx * n.x + cy * n.y) : cx * n.x + cy * n.y + cz * n.z;
     const sign = facing < 0 ? -1 : 1;
-    const light = (sign * (n.x * LIGHT.x + n.y * LIGHT.y + n.z * LIGHT.z)) / length;
     triangles.push({
       a,
       b: sign < 0 ? c : b,
       c: sign < 0 ? b : c,
-      shade: Math.min(1, Math.max(0.2, 0.25 + 0.85 * light)),
+      shade: shadeOf(sign * light),
     });
   };
   const strip = (from: Vector3[], to: Vector3[], inward = false) =>
@@ -103,10 +133,14 @@ function buildMesh(mesh: NoteMesh): Triangle[] {
       add(p, from[j], to[j], inward);
       add(p, to[j], to[i], inward);
     });
-  const cap = (outer: Vector3[], inner: Vector3[] | null, z: number) =>
-    inner
-      ? strip(outer, inner)
-      : outer.forEach((p, i) => add(Vector3(0, 0, z), p, outer[(i + 1) % count]));
+  const bulge = ((mesh.bulge ?? 0) / 100) * 0.175;
+  const cap = (outer: Vector3[], inner: Vector3[] | null, z: number) => {
+    if (inner) return strip(outer, inner);
+    const top = z + Math.sign(z) * bulge;
+    const rings = bulge > 0 ? [0.75, 0.5, 0.25].map((s) => outer.map((p) => Vector3(p.x * s, p.y * s, z + (top - z) * (1 - s * s)))) : [];
+    const last = [outer, ...rings].reduce((from, to) => (strip(from, to), to));
+    last.forEach((p, i) => add(Vector3(0, 0, top), p, last[(i + 1) % count]));
+  };
 
   cap(back, innerBack, half);
   if (innerFront && innerBack) strip(innerFront, innerBack, true);
@@ -118,17 +152,17 @@ function buildMesh(mesh: NoteMesh): Triangle[] {
 }
 
 export function drawMesh(
-  mesh: NoteMesh,
+  mesh: NoteMesh | string,
   position: Vector3,
   size: number,
   color: Color,
   rotation: { x: number; y: number } = { x: 0, y: 0 },
   outline: boolean = false
 ): void {
-  const key = [mesh.corners, mesh.rounding, mesh.fill, mesh.depth, mesh.bevel].join("|");
+  const key = typeof mesh === "string" ? mesh : [mesh.corners, mesh.rounding, mesh.fill, mesh.depth, mesh.bevel, mesh.bulge].join("|");
   if (!meshCache.has(key)) {
     if (meshCache.size > 64) meshCache.clear();
-    meshCache.set(key, buildMesh(mesh));
+    meshCache.set(key, typeof mesh === "string" ? loadObj(mesh) : buildMesh(mesh));
   }
 
   rlPushMatrix();
@@ -137,6 +171,7 @@ export function drawMesh(
   rlRotatef(rotation.x, 1, 0, 0);
   rlRotatef(rotation.y, 0, 1, 0);
   rlScalef(size, size, size);
+  if (typeof mesh === "string") rlDisableBackfaceCulling();
   const triangles = meshCache.get(key)!;
   triangles.forEach((t) =>
     DrawTriangle3D(t.a, t.b, t.c, {
@@ -153,11 +188,12 @@ export function drawMesh(
       DrawLine3D(t.c, t.a, OUTLINE_COLOR);
     });
   }
+  if (typeof mesh === "string") rlEnableBackfaceCulling();
   rlPopMatrix();
 }
 
 export class MeshNoteRenderer extends BaseNoteRenderer {
-  constructor(config: NoteRenderConfig, private mesh: NoteMesh) {
+  constructor(config: NoteRenderConfig, private mesh: NoteMesh | string) {
     super(config);
   }
 

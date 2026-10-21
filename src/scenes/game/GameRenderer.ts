@@ -13,6 +13,7 @@ import {
   GetFrameTime,
   GetScreenWidth,
   GetScreenHeight,
+  Color,
 } from "raylib";
 import type { GameSettings } from "../../utils/gameSettingsSchema";
 import { GameLogic, GameState } from "./GameLogic";
@@ -25,6 +26,8 @@ import { BongoCatDecoration } from "./panel-decorations/BongoCatDecoration";
 import { WinXpTopBarDecoration } from "./panel-decorations/WinXpTopBarDecoration";
 import { HitParticleSystem } from "./atoms/HitParticleSystem";
 import { MissParticleSystem } from "./atoms/MissParticleSystem";
+import { NoteEffectSystem } from "./atoms/NoteEffectSystem";
+import { ConfigManager } from "../../utils/configManager";
 import { drawSprite } from "../../utils/sprite";
 import { drawText } from "../../utils/text";
 import { noteColorManager } from "../../utils/noteColorPalette";
@@ -56,6 +59,8 @@ export class GameRenderer {
   private gameUI: GameUI;
   private hitParticleSystem: HitParticleSystem;
   private missParticleSystem: MissParticleSystem;
+  private hitEffects = new NoteEffectSystem();
+  private missEffects = new NoteEffectSystem();
   private onNoteHitCallback?: (args: {
     timeMs: number;
     note: [number, number, number];
@@ -257,6 +262,15 @@ export class GameRenderer {
     this.drawCursor();
     this.updateAndRenderParticles(settings);
     this.updateAndRenderMissParticles(settings);
+    const deltaMs = GetFrameTime() * 1000;
+    const textAngle =
+      (settings.billboardScore ?? 0) > 0 && (settings.spinCamera ?? 0) > 0
+        ? -gameState.currentMsTime * 0.012
+        : 0;
+    this.hitEffects.update(deltaMs);
+    this.hitEffects.render(1, textAngle);
+    this.missEffects.update(deltaMs);
+    this.missEffects.render(settings.missParticleOpacity ?? 1);
 
     modeForPost.renderExtras?.("postNotes", context, this, gameLogic);
     rlPopMatrix();
@@ -514,6 +528,11 @@ export class GameRenderer {
       squareScale: settings.squareScale ?? 1.0,
       noteMaxOpacity: settings.noteMaxOpacity ?? 1.0,
       halfGhost: (settings.halfGhost ?? 0) > 0,
+      halfGhostStrength: settings.halfGhostStrength ?? 0.8,
+      spin: { x: settings.noteSpinX ?? 0, y: settings.noteSpinY ?? 0, z: settings.noteSpinZ ?? 0 },
+      spawnEffect: (settings.noteSpawnEffect ?? 0) > 0,
+      approachSquares: (settings.approachSquares ?? 0) > 0,
+      approachFollow: (settings.approachFollow ?? 0) > 0,
     });
   }
 
@@ -576,6 +595,7 @@ export class GameRenderer {
           visibilityWindow
         );
 
+    let score = gameLogic.getStats().score;
     for (let i = visibleRange.endIndex - 1; i >= visibleRange.startIndex; i--) {
       const note = notes[i];
 
@@ -589,11 +609,13 @@ export class GameRenderer {
       );
 
       if (hitResult.newlyHit) {
-        this.handleNoteHit(note, i, gameState.adjustedMsTime);
+        const gained = gameLogic.getStats().score - score;
+        score += gained;
+        this.handleNoteHit(note, i, gameState.adjustedMsTime, gained);
       }
 
       if (hitResult.newlyMissed) {
-        this.handleNoteMiss(note);
+        this.handleNoteMiss(note, i);
       }
 
       if (hitResult.hit && gameState.adjustedMsTime >= note[0]) {
@@ -667,7 +689,8 @@ export class GameRenderer {
   private handleNoteHit(
     note: [number, number, number],
     noteIndex: number,
-    adjustedMsTime: number
+    adjustedMsTime: number,
+    score: number
   ): void {
     const noteColor = noteColorManager.getColorForNoteIndex(noteIndex);
     this.backgroundRenderer.setAccentColor(noteColor);
@@ -679,15 +702,21 @@ export class GameRenderer {
       b: noteColor.b,
     };
 
-    const noteX = Rhythia.gameWidth / 2 + (note[1] - 1) * 100;
-    const noteY = Rhythia.gameHeight / 2 + (note[2] - 1) * 100;
-    const burstEnabled =
-      this.currentContext?.settings?.burstParticleEnabled ?? 1.0;
-    const burstIntensity =
-      (this.currentContext?.settings?.burstParticleIntensity ?? 1.0) *
-      burstEnabled;
-    this.hitParticleSystem.setIntensity(burstIntensity);
-    this.hitParticleSystem.spawnParticles(noteX, noteY, noteColor);
+    const settings = this.currentContext?.settings ?? {};
+    const atCursor = (settings.hitEffectAtCursor ?? 1) > 0;
+    if ((settings.burstParticleEnabled ?? 1) > 0) {
+      this.spawnNoteEffect(
+        ConfigManager.getExtra("hitEffect", "ssp_ripple"),
+        atCursor ? this.lastCursorPos.x : Rhythia.gameWidth / 2 + (note[1] - 1) * 100,
+        atCursor ? this.lastCursorPos.y : Rhythia.gameHeight / 2 + (note[2] - 1) * 100,
+        noteColor,
+        ConfigManager.getExtra("hitEffectImage", ""),
+        this.hitEffects
+      );
+    }
+    if ((settings.scorePopup ?? 0) > 0) {
+      this.hitEffects.spawnScore(this.lastCursorPos.x, Rhythia.gameHeight / 2 + 105, noteColor, score);
+    }
 
     try {
       const cx = this.lastCursorPos.x;
@@ -702,11 +731,36 @@ export class GameRenderer {
     } catch {}
   }
 
-  private handleNoteMiss(note: [number, number, number]): void {
-    const noteX = Rhythia.gameWidth / 2 + (note[1] - 1) * 100;
-    const noteY = Rhythia.gameHeight / 2 + (note[2] - 1) * 100;
-    this.missParticleSystem.spawnMissParticle(noteX, noteY);
+  private handleNoteMiss(note: [number, number, number], noteIndex: number): void {
+    if ((this.currentContext?.settings.missParticleEnabled ?? 1) > 0) {
+      this.spawnNoteEffect(
+        ConfigManager.getExtra("missEffect", "ssp_miss"),
+        Rhythia.gameWidth / 2 + (note[1] - 1) * 100,
+        Rhythia.gameHeight / 2 + (note[2] - 1) * 100,
+        noteColorManager.getColorForNoteIndex(noteIndex),
+        ConfigManager.getExtra("missEffectImage", ""),
+        this.missEffects
+      );
+    }
     this.triggerShake(6 * (this.currentContext?.settings.missParticleOpacity ?? 1), 120);
+  }
+
+  private spawnNoteEffect(
+    id: string,
+    x: number,
+    y: number,
+    color: Color,
+    image: string,
+    effects: NoteEffectSystem
+  ): void {
+    if (id === "burst") {
+      this.hitParticleSystem.setIntensity(this.currentContext?.settings.burstParticleIntensity ?? 1);
+      this.hitParticleSystem.spawnParticles(x, y, color);
+    } else if (id === "cross") {
+      this.missParticleSystem.spawnMissParticle(x, y);
+    } else {
+      effects.spawn(id, x, y, color, image);
+    }
   }
 
   private updateAndRenderParticles(settings: Partial<GameSettings>): void {
@@ -714,19 +768,13 @@ export class GameRenderer {
 
     if (hitOpacity) {
       const deltaTimeMs = GetFrameTime() * 1000;
-      const burstEnabled = settings.burstParticleEnabled ?? 1.0;
-      const burstIntensity =
-        (settings.burstParticleIntensity ?? 1.0) * burstEnabled;
-
-      this.hitParticleSystem.setIntensity(burstIntensity);
       this.hitParticleSystem.update(deltaTimeMs);
       this.hitParticleSystem.render(hitOpacity);
     }
   }
 
   private updateAndRenderMissParticles(settings: Partial<GameSettings>): void {
-    const missOpacity =
-      (settings.missParticleOpacity ?? 0.8) * (settings.missParticleEnabled ?? 1);
+    const missOpacity = settings.missParticleOpacity ?? 0.8;
     if (missOpacity) {
       const deltaTimeMs = GetFrameTime() * 1000;
       this.missParticleSystem.update(deltaTimeMs);
