@@ -3,10 +3,20 @@ import {
   gameSettingSlider,
   gameSettingToggle,
   type SettingsRow,
-  type RGB,
 } from "../pages";
 import { ConfigManager } from "../../../utils/configManager";
 import { toGameConfigKey } from "../../../utils/gameSettingsSchema";
+import { uiColorRow } from "./uiColors";
+
+const isOn = (key: string) => ConfigManager.get()[toGameConfigKey(key)] > 0;
+
+const groupToggle = (label: string, keys: string[]): SettingsRow => ({
+  kind: "toggle",
+  label,
+  defaultValue: true,
+  get: () => keys.some(isOn),
+  set: (value) => ConfigManager.setGameSettings(Object.fromEntries(keys.map((key) => [key, value ? 1 : 0]))),
+});
 
 const areas = [
   {
@@ -14,7 +24,8 @@ const areas = [
     title: "Left Panel",
     subtitle: "Combo, accuracy and misses",
     icon: "/icons/layout-sidebar.png",
-    keys: ["hudLeftBackground", "hudCombo", "hudAccuracy", "hudMisses"],
+    keys: ["hudLeftBackground", "hudCombo", "hudAccuracy", "hudAccuracyBar", "hudMisses", "hudPauses"],
+    show: "Show Left Panel",
   },
   {
     id: "interfaceRight",
@@ -22,6 +33,7 @@ const areas = [
     subtitle: "Score, rank and notes left",
     icon: "/icons/layout-sidebar-right.png",
     keys: ["hudRightBackground", "hudScore", "hudRank", "hudNotesLeft"],
+    show: "Show Right Panel",
   },
   {
     id: "interfaceTopBottom",
@@ -30,6 +42,9 @@ const areas = [
     icon: "/icons/layout-navbar.png",
     keys: ["hudMapTitle", "hudTime", "hudProgressBar", "hudHealthBar"],
     extra: (): SettingsRow[] => [
+      groupToggle("Show Timer", ["hudMapTitle", "hudTime", "hudProgressBar"]),
+      gameSettingToggle("attachTimerToGrid"),
+      gameSettingToggle("attachHpToGrid"),
       gameSettingSlider("healthBarWidth"),
       gameSettingSlider("healthBarHeight"),
       gameSettingSlider("healthBarOpacity"),
@@ -51,7 +66,11 @@ areas.forEach((area) =>
     title: area.title,
     subtitle: area.subtitle,
     icon: area.icon,
-    rows: () => [...(area.extra?.() ?? []), ...area.keys.map((key) => gameSettingToggle(key))],
+    rows: () => [
+      ...(area.show ? [groupToggle(area.show, area.keys)] : []),
+      ...(area.extra?.() ?? []),
+      ...area.keys.map((key) => gameSettingToggle(key)),
+    ],
   })
 );
 
@@ -69,8 +88,6 @@ registerSettingsPage({
     gameSettingSlider("gridFadeFalloff"),
   ],
 });
-
-const isOn = (key: string) => ConfigManager.get()[toGameConfigKey(key)] > 0;
 
 const areaValue = (keys: string[]) => {
   const on = keys.filter(isOn).length;
@@ -112,18 +129,16 @@ registerSettingsPage({
       get: () => ConfigManager.get().gameUiOpacity * 5,
       set: (value) => ConfigManager.setGameSettings({ uiOpacity: value / 5 }),
     }),
-    {
-      kind: "color",
-      label: "Panel Color",
-      get: () => ConfigManager.getExtra<RGB>("panelColor", { r: 255, g: 255, b: 255 }),
-      set: (color) => ConfigManager.setExtra("panelColor", color),
-      defaultValue: { r: 255, g: 255, b: 255 },
-      opacity: {
-        get: () => ConfigManager.getExtra("panelColorOpacity", 0),
-        set: (value) => ConfigManager.setExtra("panelColorOpacity", value),
-      },
-    },
+    uiColorRow("Panel Background", "panelBg"),
     gameSettingSlider("failVignetteOpacity"),
     gameSettingSlider("missParticleOpacity", { label: "Miss Effect Opacity" }),
+    { kind: "section", label: "UI" },
+    gameSettingToggle("borderEnabled", { label: "Border" }),
+    gameSettingToggle("simpleHud"),
+    gameSettingToggle("showConfig"),
+    gameSettingToggle("displayTrueCombo"),
+    gameSettingToggle("scorePopup"),
+    gameSettingToggle("expandHudOnHr"),
+    gameSettingToggle("showFcGrade"),
   ],
 });

@@ -24,7 +24,6 @@ export class HealthGameUIPanel extends GameUIPanel<HealthPanelArgs> {
     const baseBorderSize = 320 * playfieldScale;
     const barWidth = args.settings?.healthBarWidth ?? 120;
     const barHeight = args.settings?.healthBarHeight ?? 14;
-    const uiTiltRate = args.settings?.uiTiltRate ?? 1.0;
     const uiScale = args.settings?.uiScale ?? 1.0;
 
     const planeX = Rhythia.gameWidth / 2;
@@ -38,12 +37,7 @@ export class HealthGameUIPanel extends GameUIPanel<HealthPanelArgs> {
     const depth = args.closeDistance;
     rlTranslatef(planeX, planeY, depth);
 
-    const tiltCompensation = 1 - uiTiltRate;
-    rlTranslatef(
-      args.cameraTiltX * 100 * tiltCompensation,
-      args.cameraTiltY * 100 * tiltCompensation,
-      0
-    );
+    this.applyTilt(args, (args.settings?.attachHpToGrid ?? 0) > 0);
     rlScalef(uiScale, uiScale, 1.0);
 
     const barX = -barWidth / 2;
@@ -53,53 +47,24 @@ export class HealthGameUIPanel extends GameUIPanel<HealthPanelArgs> {
       args.settings?.healthBarOpacity !== undefined
         ? clamp(args.settings.healthBarOpacity, 0, 1)
         : 1;
-    const backgroundOpacity = Math.round(200 * backgroundOpacitySetting);
     drawSprite(
       "/solid.png",
       Vector2(barX, barY),
       Vector2(barWidth, barHeight),
-      { r: 8, g: 8, b: 8, a: backgroundOpacity }
+      this.color("energyEmptyColor", 255 * backgroundOpacitySetting)
     );
 
     const clampedHealth = clamp(args.health, 0, args.maxHealth);
     const fillWidth = (barWidth * clampedHealth) / args.maxHealth;
     if (fillWidth > 0) {
-      const fillColor = this.getFillColor(
-        clampedHealth,
-        args.maxHealth,
-        backgroundOpacitySetting
-      );
       drawSprite(
         "/solid.png",
         Vector2(barX, barY),
         Vector2(fillWidth, barHeight),
-        fillColor
+        this.color("energyFillColor", 255 * backgroundOpacitySetting)
       );
     }
 
     rlPopMatrix();
-  }
-
-  private getFillColor(
-    health: number,
-    maxHealth: number,
-    opacityMultiplier: number
-  ) {
-    const normalized = clamp(health / maxHealth, 0, 1);
-
-    const baseRed = 85;
-    const baseGreen = 175;
-    const baseBlue = 75;
-
-    const red = Math.round(140 + (baseRed - 140) * normalized);
-    const green = Math.round(80 + (baseGreen - 80) * normalized);
-    const blue = Math.round(40 + (baseBlue - 40) * normalized);
-
-    return {
-      r: red,
-      g: green,
-      b: blue,
-      a: Math.round(220 * opacityMultiplier),
-    };
   }
 }

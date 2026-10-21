@@ -13,6 +13,8 @@ import {
   GetFrameTime,
   GetScreenWidth,
   GetScreenHeight,
+  ColorFromHSV,
+  Color,
 } from "raylib";
 import type { GameSettings } from "../../utils/gameSettingsSchema";
 import { GameLogic, GameState } from "./GameLogic";
@@ -34,6 +36,7 @@ import { UIDecoration } from "./panel-decorations/UIDecoration";
 import { ModeManager } from "./modes";
 import { SkinNoteRenderer } from "./noteRenderers/noteSkins";
 import { selectedBorderSkin } from "./borderSkins";
+import { rainbowHue } from "./panels/GameUIPanel";
 
 export interface RenderContext {
   gameState: GameState;
@@ -88,6 +91,12 @@ export class GameRenderer {
   };
 
   private readonly borderOpacityHoldDuration = 200; 
+
+  private hudExpand = 1;
+  private trueCombo = 0;
+  private trueComboOffset = 0;
+  private configTime = 2.5;
+  private scorePopups: { x: number; color: Color; value: number; t: number }[] = [];
 
   constructor() {
     this.cursorRenderer = new CursorRenderer({
@@ -229,8 +238,18 @@ export class GameRenderer {
       rlTranslatef(-gameCenterX, -gameCenterY, 0);
     }
 
+    this.hudExpand =
+      (settings.expandHudOnHr ?? 0) > 0 && ModeManager.getActiveModeIds().includes("hardrock") ? 1.35 : 1;
     this.renderBorder(gameState, settings, gameCenterX, gameCenterY);
     this.updateRendererConfigs(settings);
+
+    if ((settings.displayTrueCombo ?? 1) > 0 && gameState.isStandaloneGame) {
+      const combo = gameLogic.getStats().combo;
+      if (combo !== this.trueCombo) this.trueComboOffset = -16;
+      this.trueCombo = combo;
+      this.trueComboOffset = lerpDelta(this.trueComboOffset, 0, 0.25);
+      drawText(`${combo}`, Vector2(gameCenterX, gameCenterY - 120 + this.trueComboOffset), 42, { r: 255, g: 255, b: 255, a: 50 }, "center");
+    }
 
     const cursorPos = this.prepareCursor(
       gameState,
@@ -257,6 +276,16 @@ export class GameRenderer {
     this.drawCursor();
     this.updateAndRenderParticles(settings);
     this.updateAndRenderMissParticles(settings);
+    this.scorePopups = this.scorePopups.filter((popup) => (popup.t -= GetFrameTime() * 3) > 0);
+    this.scorePopups.forEach((popup) =>
+      drawText(
+        `+${popup.value.toLocaleString("en-US")}`,
+        Vector2(popup.x, gameCenterY + 80 + clamp(2 * (0.75 - popup.t) ** 2 - 0.125, -1, 1) * 40),
+        24,
+        { ...popup.color, a: Math.round(127 * popup.t) },
+        "center"
+      )
+    );
 
     modeForPost.renderExtras?.("postNotes", context, this, gameLogic);
     rlPopMatrix();
@@ -366,10 +395,11 @@ export class GameRenderer {
       gameState.adjustedMsTime
     );
     const borderOpacity = borderAppearance.opacity;
-    const borderColor = borderAppearance.color;
+    const borderColor =
+      (settings.rainbowGrid ?? 0) > 0 ? ColorFromHSV(rainbowHue(), 0.65, 1) : borderAppearance.color;
 
     rlPushMatrix();
-    const borderSize = 320 * 1.0;
+    const borderSize = 320 * this.hudExpand;
     const borderOffset = borderSize / 2;
     const gridParallax = (settings.gridParallax ?? 1) * 100;
     rlTranslatef(
@@ -590,6 +620,13 @@ export class GameRenderer {
 
       if (hitResult.newlyHit) {
         this.handleNoteHit(note, i, gameState.adjustedMsTime);
+        if ((settings.scorePopup ?? 0) > 0)
+          this.scorePopups.push({
+            x: cursorPos.x,
+            color: noteColorManager.getColorForNoteIndex(i),
+            value: 100 * Math.min(gameLogic.getStats().combo, 1000),
+            t: 1,
+          });
       }
 
       if (hitResult.newlyMissed) {
@@ -745,7 +782,7 @@ export class GameRenderer {
     if (!mapData?.notes) return;
 
     const stats = gameLogic.getStats();
-    this.gameUI.updateStats(stats.hits, stats.misses, stats.combo);
+    this.gameUI.updateStats(stats.hits, stats.misses, stats.combo, stats.pauses);
     this.gameUI.render(
       mapData,
       gameState.currentMsTime,
@@ -753,10 +790,31 @@ export class GameRenderer {
       playfieldDistance,
       cameraTiltX,
       cameraTiltY,
-      settings,
+      this.hudExpand > 1
+        ? { ...settings, playfieldScale: (settings.playfieldScale ?? 1) * this.hudExpand, uiScale: (settings.uiScale ?? 1) * 0.85 }
+        : settings,
       context.health,
-      context.maxHealth
+      context.maxHealth,
+      gameState.canSkip
     );
+
+    this.configTime = Math.max(0, this.configTime - GetFrameTime());
+    if ((settings.showConfig ?? 1) > 0 && this.configTime > 0 && gameState.isStandaloneGame) {
+      const alpha = Math.min(1, this.configTime);
+      const rows = [
+        ["APPROACH RATE", (settings.approachRate ?? 0).toFixed(1)],
+        ["APPROACH DISTANCE", (settings.approachDistance ?? 0).toFixed(1)],
+        ["SENSITIVITY", (settings.mouseSensitivity ?? 0).toFixed(2)],
+        ["PARALLAX", (settings.gridParallax ?? 1).toFixed(2)],
+      ];
+      const centerX = Rhythia.gameWidth / 2;
+      const top = Rhythia.gameHeight / 2 - rows.length * 25;
+      drawSprite("/solid.png", Vector2(centerX - 160, top - 15), Vector2(320, rows.length * 50 + 20), { r: 0, g: 0, b: 0, a: Math.round(212 * alpha) });
+      rows.forEach(([label, value], i) => {
+        drawText(label, Vector2(centerX - 140, top + i * 50 + 8), 20, { r: 180, g: 180, b: 180, a: Math.round(255 * alpha) });
+        drawText(value, Vector2(centerX + 140, top + i * 50 + 4), 28, { r: 255, g: 255, b: 255, a: Math.round(255 * alpha) }, "right");
+      });
+    }
 
     if (gameState.canSkip && gameState.isStandaloneGame && (settings.hudSkipPrompt ?? 1) > 0) {
       this.renderSkipPrompt();
@@ -781,6 +839,8 @@ export class GameRenderer {
   }
 
   public resetForRestart(): void {
+    this.configTime = 2.5;
+    this.scorePopups = [];
     this.borderVisualState.currentOpacity = 0;
     this.borderVisualState.currentColor = { r: 255, g: 255, b: 255 };
     this.borderVisualState.lastHitTime = -1;
