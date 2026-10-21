@@ -15,7 +15,9 @@ export class NoteHitDetector {
   private hitNotes: Set<number> = new Set();
   private missedNotes: Map<number, number> = new Map();
   private scheduledHitSounds: Map<number, number> = new Map(); 
-  private baseHitWindowMs: number = 55;
+  public hitWindowMs: number = 55;
+  public hitboxSize: number = 1.14;
+  public counterSpeed: boolean = true;
   private fadeOutDuration: number = 400; 
   private lastDebugInfo: string = "";
   private combo: number = 0;
@@ -36,20 +38,17 @@ export class NoteHitDetector {
     }
 
     const timeDiff = msTime - note[0];
-    const pitch = Math.max(0.001, ModeManager.getMode().musicPitch ?? 1.0);
-    const hitThreshold = this.baseHitWindowMs * pitch;
+    const hitThreshold = this.getHitThreshold();
 
     if (timeDiff >= 0 && timeDiff <= hitThreshold) {
       const noteX = Rhythia.gameWidth / 2 + (note[1] - 1) * 100;
       const noteY = Rhythia.gameHeight / 2 + (note[2] - 1) * 100;
 
-      const noteHalfSize = 50 * (hitboxScale ?? 1.0); 
+      const reach = (50 * hitboxScale + this.cursorHitBox) * (this.hitboxSize / 1.14);
 
       const isHit =
-        cursorGameX + this.cursorHitBox >= noteX - noteHalfSize &&
-        cursorGameX - this.cursorHitBox <= noteX + noteHalfSize &&
-        cursorGameY + this.cursorHitBox >= noteY - noteHalfSize &&
-        cursorGameY - this.cursorHitBox <= noteY + noteHalfSize;
+        Math.abs(cursorGameX - noteX) <= reach &&
+        Math.abs(cursorGameY - noteY) <= reach;
 
       this.lastDebugInfo = `Note ${noteIndex}: timeDiff=${timeDiff.toFixed(
         1
@@ -127,8 +126,8 @@ export class NoteHitDetector {
   }
 
   public getHitThreshold(): number {
-    const pitch = Math.max(0.001, ModeManager.getMode().musicPitch ?? 1.0);
-    return this.baseHitWindowMs * pitch;
+    const pitch = this.counterSpeed ? Math.max(0.001, ModeManager.getMode().musicPitch ?? 1.0) : 1;
+    return this.hitWindowMs * pitch;
   }
 
   public getCombo(): number {

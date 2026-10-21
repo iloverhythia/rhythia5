@@ -26,6 +26,7 @@ import { addLocalScore } from "../../utils/storage/localScores";
 import { HealthModel } from "./health/HealthModel";
 import { SoundSpaceHealthModel } from "./health/SoundSpaceHealthModel";
 import { ModeManager } from "./modes";
+import { gameSettingValue } from "../settings/choices";
 
 export interface GameState {
   currentMsTime: number;
@@ -57,8 +58,9 @@ export class GameLogic {
   public noteHitDetector: NoteHitDetector;
   private performanceTracker: PerformanceTracker;
 
-  
-  private readonly musicStartOffset: number = 3000;
+  private get musicStartOffset(): number {
+    return gameSettingValue("leadInTime") * Math.max(0.001, ModeManager.getMode().musicPitch ?? 1.0);
+  }
 
   
   private readonly skipGapMs: number = 5000;
@@ -230,6 +232,9 @@ export class GameLogic {
 
   public update(settings?: Partial<GameSettings>): void {
     const deltaSeconds = GetFrameTime();
+    this.noteHitDetector.hitWindowMs = settings?.hitWindow ?? 55;
+    this.noteHitDetector.hitboxSize = settings?.hitboxSize ?? 1.14;
+    this.noteHitDetector.counterSpeed = (settings?.counterSpeed ?? 1) > 0;
     this.updateResumePitch(deltaSeconds);
     this.updateFailSlowStop(deltaSeconds);
 

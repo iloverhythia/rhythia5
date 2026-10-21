@@ -24,6 +24,7 @@ export interface CursorRendererConfig {
   customCursorOpacity?: number;
   customCursorRotationSpeed?: number;
   customCursorTrailEnabled?: number;
+  bufferCursor?: number;
   customCursorTexturePath?: string;
   customCursorCurrentAngle?: number;
 

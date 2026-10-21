@@ -6,6 +6,7 @@ import { NoteRenderer } from "../atoms/NoteRenderer";
 import { GameRenderer, RenderContext } from "../GameRenderer";
 import { GameLogic } from "../GameLogic";
 import { setMusicPitch } from "../../../utils/soundManager";
+import { gameSettingValue } from "../../settings/choices";
 
 import DefaultMode from "./DefaultMode";
 import NoFailMode from "./NoFailMode";
@@ -81,6 +82,15 @@ const Speed145Mode: GameMode = {
   id: "speed145",
   name: "x1.45",
   musicPitch: 1.45,
+};
+const SpeedCustomMode: GameMode = {
+  id: "speedCustom",
+  get name() {
+    return `x${(gameSettingValue("customSpeed") / 100).toFixed(2)}`;
+  },
+  get musicPitch() {
+    return gameSettingValue("customSpeed") / 100;
+  },
 };
 
 const _registry = new Map<string, GameMode>();
@@ -388,6 +398,7 @@ registerMode(Speed115Mode);
 registerMode(Speed125Mode);
 registerMode(Speed135Mode);
 registerMode(Speed145Mode);
+registerMode(SpeedCustomMode);
 registerMode(HardrockMode);
 registerMode(SuddenDeathMode);
 registerMode(GhostMode);

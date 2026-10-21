@@ -47,6 +47,7 @@ export class CursorRenderer {
   private lastCustomCursorCheck = 0;
   private readonly customCursorCacheKey = "custom-cursor-texture";
   private preparedState: PreparedCursorState | null = null;
+  public driftPosition: Vector2 = Vector2(0, 0);
 
   private scaleAnimation = {
     startTime: -1,
@@ -262,6 +263,10 @@ export class CursorRenderer {
       cursorGameY = overrideGameCursor.y;
     }
 
+    this.driftPosition = Vector2(cursorGameX, cursorGameY);
+    cursorGameX = this.clamp(cursorGameX, Rhythia.gameWidth / 2 - 150, Rhythia.gameWidth / 2 + 150);
+    cursorGameY = this.clamp(cursorGameY, Rhythia.gameHeight / 2 - 150, Rhythia.gameHeight / 2 + 150);
+
     const cursorPosition = Vector2(cursorGameX, cursorGameY);
     this.lastCursorPosition = cursorPosition;
 
@@ -334,6 +339,16 @@ export class CursorRenderer {
     rlTranslatef(0, 0, planeZ);
 
     this.effects.forEach((effect) => effect.render(effectContext));
+
+    const drift = this.driftPosition;
+    if ((this.config.bufferCursor ?? 1) > 0 && (drift.x !== cursorPosition.x || drift.y !== cursorPosition.y)) {
+      drawSprite(
+        "/circle.png",
+        Vector2(drift.x - 4 * totalScale, drift.y - 4 * totalScale),
+        Vector2(8 * totalScale, 8 * totalScale),
+        { ...tint, a: Math.round(255 * opacity) }
+      );
+    }
 
     const drewCustomCursor =
       customCursorEnabled &&

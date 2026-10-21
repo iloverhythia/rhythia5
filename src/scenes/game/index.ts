@@ -333,6 +333,15 @@ export class GameScene extends Scene {
       this.gameLogic.update(settings);
     }
 
+    if (
+      (settings.restartOnDeath ?? 0) > 0 &&
+      !this.replayPlayer &&
+      this.gameLogic.getGameState().healthEnded &&
+      this.quickRestart.isIdle()
+    ) {
+      this.startQuickRestart();
+    }
+
     let rawMouseDelta: Vector2 | undefined;
     if (!this.autoPlayEnabled && this.cursorLocked) {
       rawMouseDelta = GetMouseDelta();
@@ -401,6 +410,14 @@ export class GameScene extends Scene {
       const screenY =
         destY + (this.lastCursorPos.y / Rhythia.gameHeight) * destHeight;
       mousePos = Vector2(screenX, screenY);
+    } else {
+      const { destX, destY, destWidth, destHeight } = this.getDisplayDestRect();
+      const os = GetMousePosition();
+      const scale = settings.absoluteScale ?? 1;
+      mousePos = Vector2(
+        destX + destWidth / 2 + (os.x - destX - destWidth / 2) * scale,
+        destY + destHeight / 2 + (os.y - destY - destHeight / 2) * scale,
+      );
     }
 
     const gameState = this.gameLogic.getGameState();
@@ -733,7 +750,7 @@ export class GameScene extends Scene {
     }
 
     if (!this.pauseOverlay.isActive) {
-      if (!this.quickRestart.isIdle()) {
+      if (!this.quickRestart.isIdle() || (this.getGameSettingsFromConfig().disablePausing ?? 0) > 0) {
         return false;
       }
       this.startPause();

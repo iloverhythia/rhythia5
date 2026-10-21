@@ -68,6 +68,7 @@ export class GameRenderer {
     Rhythia.gameHeight / 2
   );
   private currentContext: RenderContext | null = null;
+  private fov: number = 0;
 
   
   private shakeTimeLeftMs: number = 0;
@@ -221,7 +222,12 @@ export class GameRenderer {
       gameCenterX,
       gameCenterY
     );
-    const fov = Math.min(settings.cameraFov ?? 74, 179);
+    const baseFov = settings.cameraFov ?? 74;
+    const fov = clamp(this.fov || baseFov, 1, 179);
+    this.fov =
+      settings.hitFovMode === 3
+        ? baseFov
+        : baseFov + (fov - baseFov) * Math.pow(1 - 1 / (settings.hitFovDecay ?? 20), GetFrameTime() * 120);
     rlScalef(1, 1, Math.tan((fov * Math.PI) / 360) / Math.tan((74 * Math.PI) / 360));
     if ((settings.spinCamera ?? 0) > 0) {
       rlTranslatef(gameCenterX, gameCenterY, 0);
@@ -246,7 +252,7 @@ export class GameRenderer {
       context.seedCursorGamePos
     );
 
-    this.lastCursorPos = cursorPos;
+    this.lastCursorPos = (settings.followBufferCursor ?? 0) > 0 ? this.cursorRenderer.driftPosition : cursorPos;
 
     const modeForPre = ModeManager.getMode();
     const modeForPost = ModeManager.getMode();
@@ -268,17 +274,18 @@ export class GameRenderer {
     }
     
     const distanceScaleOnly = 300 / (playfieldDistance || 300);
+    const hudTilt = (settings.farawayHud ?? 0) > 0 ? 3.75 / 13.75 : 1;
     this.applySceneTransforms(
-      cameraTiltX,
-      cameraTiltY,
+      cameraTiltX * hudTilt,
+      cameraTiltY * hudTilt,
       distanceScaleOnly,
       gameCenterX,
       gameCenterY
     );
     this.renderUI(
       context,
-      cameraTiltX,
-      cameraTiltY,
+      cameraTiltX * hudTilt,
+      cameraTiltY * hudTilt,
       playfieldDistance,
       gameLogic
     );
@@ -500,6 +507,7 @@ export class GameRenderer {
       customCursorOpacity: settings.customCursorOpacity ?? 1.0,
       customCursorRotationSpeed: (settings.cursorRotation ?? 0) * 72,
       customCursorTrailEnabled: settings.customCursorTrailEnabled ?? 0.0,
+      bufferCursor: settings.bufferCursor ?? 1,
 
       spaceCursorEnabled: settings.spaceCursorEnabled ?? 0.0,
       spaceStarDensity: settings.spaceStarDensity ?? 16,
@@ -511,7 +519,7 @@ export class GameRenderer {
     });
 
     this.noteRenderer.updateConfig({
-      squareScale: settings.squareScale ?? 1.0,
+      squareScale: (settings.squareScale ?? 1.0) * ((settings.hitboxSize ?? 1.14) / 1.14),
       noteMaxOpacity: settings.noteMaxOpacity ?? 1.0,
       halfGhost: (settings.halfGhost ?? 0) > 0,
     });
@@ -689,9 +697,20 @@ export class GameRenderer {
     this.hitParticleSystem.setIntensity(burstIntensity);
     this.hitParticleSystem.spawnParticles(noteX, noteY, noteColor);
 
+    const settings = this.currentContext?.settings ?? {};
+    if ((settings.hitFov ?? 0) > 0) {
+      const baseFov = settings.cameraFov ?? 74;
+      const amplifier = settings.hitFovAmplifier ?? 2;
+      const fov = this.fov || baseFov;
+      this.fov = clamp(
+        [baseFov - amplifier, fov + amplifier, fov * amplifier, baseFov - amplifier][settings.hitFovMode ?? 1],
+        1,
+        179
+      );
+    }
+
     try {
-      const cx = this.lastCursorPos.x;
-      const cy = this.lastCursorPos.y;
+      const { x: cx, y: cy } = this.cursorRenderer.getCursorPosition();
       this.onNoteHitCallback?.({
         timeMs: adjustedMsTime,
         note,
