@@ -48,9 +48,9 @@ export function notify(message: string): void {
   }, 1200);
 }
 
-export function pickFile(filter: Record<string, string>): string | null {
+export async function pickFile(filter: Record<string, string>): Promise<string | null> {
   try {
-    return openDialog(filter as any) || null;
+    return (await openDialog(filter as any)) || null;
   } catch {
     return null;
   }

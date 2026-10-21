@@ -81,8 +81,8 @@ export function pickFileButton(
   return {
     kind: "button",
     label,
-    onClick: () => {
-      const picked: string = openDialog(filter as any);
+    onClick: async () => {
+      const picked: string = await openDialog(filter as any);
       if (!picked) return;
       const target = folder
         ? path.join(appDataFolder(folder), path.basename(picked))

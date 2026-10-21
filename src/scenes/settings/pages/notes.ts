@@ -31,8 +31,8 @@ const grid = skinGridRows({
     { label: "Build", onClick: () => settingsNavigation.open("note-builder") },
     {
       label: "Import",
-      onClick: () => {
-        const file = pickFile({ images: "png" });
+      onClick: async () => {
+        const file = await pickFile({ images: "png" });
         if (file) ConfigManager.setExtra("noteSkin", addSkinFile("noteskins", file));
       },
     },
