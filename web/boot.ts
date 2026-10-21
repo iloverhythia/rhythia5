@@ -62,8 +62,6 @@ async function main() {
     }
   };
   await Promise.all(Array.from({ length: 6 }, worker));
-  // The tutorial ends with an online map download, which can't happen here, so first launch goes straight to the menu.
-  if (!vfs.has("home/player/AppData/Local/Rhythia/config.json") && !vfs.has("config.json")) vfs.put("config.json", new TextEncoder().encode(JSON.stringify({ passedInit: true, selectedTab: "Downloaded" })));
   setStatus("Ready", 1);
   const start = document.getElementById("start") as HTMLButtonElement;
   start.hidden = false;
@@ -92,7 +90,14 @@ function installDrop() {
     try { (toastManager as any).show(`Imported ${ok}/${files.length} map${files.length > 1 ? "s" : ""}`); } catch {}
     const { state } = await import("../src/atoms/sysutils/state");
     const scene: any = state.currentScene;
-    if (scene && scene.sceneName === "Menu" && scene.handleTabChange) { scene.currentTab = ""; scene.handleTabChange("Downloaded"); }
+    if (scene && scene.sceneName === "Menu") {
+      // Same steps as the menu's own Import .sspm flow (switchToDownloaded).
+      scene.currentTab = "Downloaded";
+      try { scene.topBar.goToTab("Downloaded"); } catch {}
+      scene.clearAllMaps();
+      scene.allDownloadedBeatmaps = [];
+      await scene.loadDownloadedMaps();
+    }
   });
 }
 
