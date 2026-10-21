@@ -24,6 +24,10 @@ import "../scenes/game/cursorEffects/SpaceCursorEffect";
 import "../scenes/game/panel-decorations/BongoCatDecoration";
 import "../scenes/game/panel-decorations/WinXpTopBarDecoration";
 import "../scenes/game/hitParticles/BurstParticleEffect";
+import "../scenes/settings/register/gameplay";
+import "../scenes/settings/register/interface";
+import "../scenes/settings/register/cursorAudio";
+import "../scenes/settings/register/skins";
 
 const PLACEHOLDER_ICON_PATH = "/customize.png" as const;
 
@@ -44,8 +48,8 @@ registerCustomization(
       key: "globalOffset",
       label: "Global Offset (ms)",
       defaultValue: 0,
-      min: -160,
-      max: 160,
+      min: -500,
+      max: 500,
       step: 1,
       category: "Timing",
       itemCategory: SYSTEM_CORE_CATEGORY,
@@ -211,8 +215,8 @@ registerCustomization(
       key: "mouseSensitivity",
       label: "Mouse Sensitivity",
       defaultValue: 0.65,
-      min: 0.01,
-      max: 5.0,
+      min: 0.001,
+      max: 10.0,
       step: 0.05,
       category: "Cursor",
       itemCategory: SYSTEM_CURSOR_CATEGORY,

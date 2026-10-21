@@ -129,12 +129,9 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
     );
     rlRotatef(10, 0, 1, 0);
     rlScalef(uiScale, uiScale, 1.0);
-    drawSprite(
-      "/solid.png",
-      Vector2(-planeWidth / 2, -planeHeight / 2),
-      Vector2(planeWidth, planeHeight),
-      { r: 0, g: 0, b: 0, a: Math.round(255 * uiOpacity * 3) }
-    );
+    if ((args.settings?.hudRightBackground ?? 1) > 0) {
+      this.drawBackground(planeWidth, planeHeight, uiOpacity);
+    }
 
     const startY = -40;
     const textOpacity = Math.round(255 * (uiOpacity * 5));
@@ -145,23 +142,25 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
     const letterRank = this.computeLetterRank(accuracy);
     this.updateRankTransition(letterRank);
 
-    drawText(
-      `SCORE`,
-      Vector2(0, startY - 70),
-      18,
-      { r: 180, g: 180, b: 180, a: textOpacity },
-      "center"
-    );
     const scoreText = `${this.formatScore(args.score)}`;
     const scoreY = startY - 45;
     const scoreFontSize = 36;
-    drawText(
-      scoreText,
-      Vector2(0, scoreY),
-      scoreFontSize,
-      { r: 255, g: 255, b: 255, a: textOpacity },
-      "center"
-    );
+    if ((args.settings?.hudScore ?? 1) > 0) {
+      drawText(
+        `SCORE`,
+        Vector2(0, startY - 70),
+        18,
+        { r: 180, g: 180, b: 180, a: textOpacity },
+        "center"
+      );
+      drawText(
+        scoreText,
+        Vector2(0, scoreY),
+        scoreFontSize,
+        { r: 255, g: 255, b: 255, a: textOpacity },
+        "center"
+      );
+    }
 
     let notesLeftY = startY + 120;
     const metrics = measureText(scoreText, scoreFontSize);
@@ -169,7 +168,7 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
     const badgeTop = scoreY + metrics.height + 8; 
 
     
-    if (this.currentRank || this.prevRank) {
+    if ((args.settings?.hudRank ?? 1) > 0 && (this.currentRank || this.prevRank)) {
       const t = Math.min(1, this.rankProgress);
       const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; 
       const offset = 60; 
@@ -204,13 +203,15 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
 
     const notesPlayed = total;
     const notesRemaining = Math.max(0, args.totalNotes - notesPlayed);
-    drawText(
-      `${notesRemaining} notes left`,
-      Vector2(0, notesLeftY),
-      16,
-      { r: 140, g: 140, b: 140, a: textOpacity },
-      "center"
-    );
+    if ((args.settings?.hudNotesLeft ?? 1) > 0) {
+      drawText(
+        `${notesRemaining} notes left`,
+        Vector2(0, notesLeftY),
+        16,
+        { r: 140, g: 140, b: 140, a: textOpacity },
+        "center"
+      );
+    }
 
     
     args.decorations.forEach((decoration) => {

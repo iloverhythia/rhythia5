@@ -14,6 +14,8 @@ import {
   GetKeyPressed,
   KEY_LEFT_SHIFT,
   KEY_RIGHT_SHIFT,
+  IsMouseButtonPressed,
+  MOUSE_BUTTON_RIGHT,
 } from "raylib";
 import { GameObject } from "../../atoms/Object";
 import { Scene } from "../../atoms/Scene";
@@ -22,12 +24,7 @@ import { createSquareCard, SquareCard } from "./molecules/SquareCard";
 import { createTopBar, TopBar } from "./molecules/TopBar";
 import { createPopup, Popup } from "./atoms/Popup";
 import { createModal, Modal } from "./atoms/Modal";
-import {
-  createDrawerFilters,
-  DrawerFilters,
-  SortOption,
-  SortDirection,
-} from "./molecules/DrawerFilters";
+import { createDrawerFilters, DrawerFilters } from "./molecules/DrawerFilters";
 import { createProfileDrawer, ProfileDrawer } from "./molecules/ProfileDrawer";
 import {
   createLeaderboardsDrawer,
@@ -58,7 +55,8 @@ import { getBeatmaps, getBeatmapPage } from "rhythia-api";
 import { BeatmapData } from "../../utils/types";
 import * as fs from "fs";
 import { SoundSpaceMemoryMap } from "../../utils/storage/ssmm";
-import { CustomizationScene } from "../customization";
+import { SettingsDrawer } from "../settings/SettingsDrawer";
+import "../settings/pages/index";
 import { logger } from "../../utils/logger";
 import { ConfigManager } from "../../utils/configManager";
 import { consumeLastResults } from "../../utils/results";
@@ -108,6 +106,7 @@ export class MenuScene extends Scene {
   private drawerFilters!: DrawerFilters;
   private profileDrawer!: ProfileDrawer;
   private leaderboardsDrawer!: LeaderboardsDrawer;
+  private settingsDrawer!: SettingsDrawer;
   private musicPlayer!: MusicPlayer;
   private blurredBackground!: BlurredBackground;
   private resultsOverlay!: ResultsOverlay;
@@ -155,6 +154,7 @@ export class MenuScene extends Scene {
     this.drawerFilters = createDrawerFilters();
     this.profileDrawer = createProfileDrawer();
     this.leaderboardsDrawer = createLeaderboardsDrawer();
+    this.settingsDrawer = new SettingsDrawer(() => this.selectedMap);
     this.musicPlayer = createMusicPlayer();
     this.musicPlayer.setOpenProfileHandler(async (userId: number) => {
       await this.openProfileById(userId);
@@ -193,6 +193,16 @@ export class MenuScene extends Scene {
     this.navController = new GameObject({ zBase: 2 });
     this.navController.onUpdate = () => {
       if (MenuScene.isAnyOverlayOpen()) return;
+      const mouse = this.navController!.getMousePosition();
+      if (
+        IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
+        mouse &&
+        mouse.x >= Rhythia.gameWidth - 980 &&
+        mouse.y > this.topBar.getHeight()
+      ) {
+        this.topBar.openContextMenu(mouse);
+        return;
+      }
       if ((this.topBar as any)?.isSearchFocused?.()) return;
 
       let consumedChar = false;
@@ -254,6 +264,7 @@ export class MenuScene extends Scene {
       this.drawerFilters.setAccentColor(accentColor);
       this.profileDrawer.setAccentColor(accentColor);
       this.leaderboardsDrawer.setAccentColor(accentColor);
+      this.settingsDrawer.setAccentColor(accentColor);
       this.musicPlayer.setAccentColor(accentColor);
       this.masterVolumeKnob.setAccentColor(accentColor);
       this.musicVolumeKnob.setAccentColor(accentColor);
@@ -267,6 +278,7 @@ export class MenuScene extends Scene {
     this.drawerFilters.setAccentColor(initialAccentColor);
     this.profileDrawer.setAccentColor(initialAccentColor);
     this.leaderboardsDrawer.setAccentColor(initialAccentColor);
+    this.settingsDrawer.setAccentColor(initialAccentColor);
     this.musicPlayer.setAccentColor(initialAccentColor);
     this.masterVolumeKnob.setAccentColor(initialAccentColor);
     this.musicVolumeKnob.setAccentColor(initialAccentColor);
@@ -289,7 +301,7 @@ export class MenuScene extends Scene {
     };
 
     this.topBar.onCustomizeClick = () => {
-      Rhythia.goToScene(new CustomizationScene(this.selectedMap));
+      this.settingsDrawer.open();
     };
 
     this.topBar.onToggleClick = (state: boolean) => {
@@ -366,29 +378,17 @@ export class MenuScene extends Scene {
       }, 300);
     };
 
-    this.drawerFilters.onStarFilterChange = (minStars, maxStars) => {
-      this.handleStarFilterChange(minStars, maxStars);
-    };
+    this.drawerFilters.onChange = () => this.handleFiltersChange();
 
     this.topBar.onSearchChange = (searchTerm) => {
       this.handleSearchChangeDebounced(searchTerm);
     };
 
-    this.drawerFilters.onDurationFilterChange = (minDuration, maxDuration) => {
-      this.handleDurationFilterChange(minDuration, maxDuration);
-    };
-
-    this.drawerFilters.onSortChange = (option, direction) => {
-      this.handleSortChange(option, direction);
-    };
-
     const savedTab = ConfigManager.get().selectedTab || "Downloaded";
 
-    if (savedTab === "Downloaded" || LOCAL_LISTS.includes(savedTab)) {
-      this.drawerFilters.setSortingEnabled(true);
-    } else {
-      this.drawerFilters.setSortingEnabled(false);
-    }
+    this.drawerFilters.setSortingEnabled(
+      savedTab === "Downloaded" || LOCAL_LISTS.includes(savedTab),
+    );
 
     if (savedTab !== this.currentTab) {
       this.currentTab = savedTab;
@@ -449,6 +449,7 @@ export class MenuScene extends Scene {
       const requestParams: any = {
         page: page,
         session: ProfileManager.get().token || "",
+        ...this.drawerFilters.apiParams(),
       };
 
       if (this.currentTab === "Ranked") {
@@ -457,25 +458,8 @@ export class MenuScene extends Scene {
         requestParams.status = "APPROVED";
       }
 
-      const { minStars, maxStars } = this.drawerFilters.getStarFilterValues();
-      if (minStars > 0) {
-        requestParams.minStars = minStars;
-      }
-      if (maxStars < 10) {
-        requestParams.maxStars = maxStars;
-      }
-
       if (this.currentSearchTerm && this.currentSearchTerm.trim().length > 0) {
         requestParams.textFilter = this.currentSearchTerm.trim();
-      }
-
-      const { minDuration, maxDuration } =
-        this.drawerFilters.getDurationFilterValues();
-      if (minDuration > 0) {
-        requestParams.minLength = minDuration * 1000;
-      }
-      if (maxDuration < 300) {
-        requestParams.maxLength = maxDuration * 1000;
       }
 
       const mapsRequest = await getBeatmaps(requestParams);
@@ -612,7 +596,7 @@ export class MenuScene extends Scene {
       this.allBeatmaps = [...chosen];
       this.currentMaps = [...chosen];
 
-      this.filterFavoriteMaps();
+      this.filterLocalMaps();
 
       this.popup.endLoading();
     } catch {
@@ -620,130 +604,41 @@ export class MenuScene extends Scene {
     }
   }
 
-  private filterFavoriteMaps(): void {
-    for (const button of this.mapButtons) {
-      button.destroy();
-    }
-    this.mapButtons = [];
-
-    MapButton.clearAllButtons();
-
-    const { minStars, maxStars } = this.drawerFilters.getStarFilterValues();
-    const { minDuration, maxDuration } =
-      this.drawerFilters.getDurationFilterValues();
-
-    const filteredMaps = this.allFavoriteBeatmaps.filter((map) => {
-      const starRating = map.starRating || map.difficulty || 0;
-      const passesStars =
-        starRating >= minStars && (maxStars >= 10 || starRating <= maxStars);
-
-      const duration = map.length || 0;
-      const passesDuration =
-        duration >= minDuration &&
-        (maxDuration >= 300 || duration <= maxDuration);
-
-      let passesText = true;
-      if (this.currentSearchTerm && this.currentSearchTerm.trim().length > 0) {
-        const searchTerm = this.currentSearchTerm.trim().toLowerCase();
-        const title = (map.title || "").toLowerCase();
-        passesText =
-          title.includes(searchTerm) ||
-          (this.currentTab === "Collections" &&
-            [
-              ...getCollectionsOf(String(map.id)),
-              ...(isFavorite(String(map.id)) ? ["Favorites"] : []),
-            ].some((name) => name.toLowerCase().includes(searchTerm)));
-      }
-
-      return passesStars && passesDuration && passesText;
-    });
-
-    this.allBeatmaps = filteredMaps;
-    this.currentMaps = [...filteredMaps];
-
-    if (this.alternativeViewMode) {
-      this.createSquareCards();
-    } else {
-      const topBarHeight = this.topBar.getHeight();
-      for (let i = 0; i < this.allBeatmaps.length; i++) {
-        const button = createMapButton({
-          mapContents: this.allBeatmaps[i],
-          y: topBarHeight + this.topBarPadding + i * this.buttonHeight,
-          index: i,
-        });
-        this.mapButtons.push(button);
-      }
-    }
-
-    this.updateScrollBounds();
-  }
-
-  private handleStarFilterChange(minStars: number, maxStars: number): void {
-    if (
-      this.currentTab === "Online Maps" ||
-      this.currentTab === "Ranked" ||
-      this.currentTab === "Legacy"
-    ) {
-      this.clearAllMaps();
-
-      MapButton.clearAllButtons();
-
-      this.updateScrollBounds();
-
-      this.currentPage = 1;
-      this.hasMorePages = true;
-      this.isLoadingMore = false;
-
-      this.loadBeatmaps(1);
-    } else if (this.currentTab === "Downloaded") {
-      this.filterDownloadedMaps(minStars, maxStars);
-    } else if (LOCAL_LISTS.includes(this.currentTab)) {
-      this.filterFavoriteMaps();
-    }
-  }
-
-  private handleSortChange(option: SortOption, direction: SortDirection): void {
-    if (option === "none") {
-      this.currentMaps = [...this.allBeatmaps];
-    } else {
-      this.sortMaps(option, direction);
-    }
-
+  private filterLocalMaps(): void {
+    const term = this.currentSearchTerm.trim().toLowerCase();
+    const source =
+      this.currentTab === "Downloaded"
+        ? this.allDownloadedBeatmaps
+        : this.allFavoriteBeatmaps;
+    const matches = source.filter(
+      (map) =>
+        !term ||
+        (map.title || "").toLowerCase().includes(term) ||
+        (this.currentTab === "Collections" &&
+          [
+            ...getCollectionsOf(String(map.id)),
+            ...(isFavorite(String(map.id)) ? ["Favorites"] : []),
+          ].some((name) => name.toLowerCase().includes(term))),
+    );
+    this.allBeatmaps = this.drawerFilters.apply(matches);
+    this.currentMaps = [...this.allBeatmaps];
     this.recreateMapButtons();
   }
 
-  private sortMaps(option: SortOption, direction: SortDirection): void {
-    const multiplier = direction === "asc" ? 1 : -1;
-
-    this.currentMaps.sort((a, b) => {
-      let comparison = 0;
-
-      switch (option) {
-        case "length":
-          const aLength = a.length || 0;
-          const bLength = b.length || 0;
-          comparison = aLength - bLength;
-          break;
-
-        case "starRating":
-          const aRating = a.starRating || 0;
-          const bRating = b.starRating || 0;
-          comparison = aRating - bRating;
-          break;
-
-        case "difficulty":
-          const aDiff = a.difficulty || 0;
-          const bDiff = b.difficulty || 0;
-          comparison = aDiff - bDiff;
-          break;
-
-        case "none":
-          comparison = 0;
-          break;
-      }
-
-      return comparison * multiplier;
-    });
+  private handleFiltersChange(): void {
+    if (
+      this.currentTab === "Downloaded" ||
+      LOCAL_LISTS.includes(this.currentTab)
+    ) {
+      this.filterLocalMaps();
+      return;
+    }
+    this.clearAllMaps();
+    MapButton.clearAllButtons();
+    this.currentPage = 1;
+    this.hasMorePages = true;
+    this.isLoadingMore = false;
+    this.loadBeatmaps(1);
   }
 
   private clearMapButtons(): void {
@@ -870,7 +765,8 @@ export class MenuScene extends Scene {
 
     const topBarHeight = this.topBar.getHeight();
     this.currentMaps.forEach((map, index) => {
-      const yPosition = topBarHeight + 50 + index * 136;
+      const yPosition =
+        topBarHeight + this.topBarPadding + index * this.buttonHeight;
       const mapButton = createMapButton({
         mapContents: map,
         y: yPosition,
@@ -882,33 +778,6 @@ export class MenuScene extends Scene {
     this.updateScrollBounds();
   }
 
-  private handleDurationFilterChange(
-    minDuration: number,
-    maxDuration: number,
-  ): void {
-    if (
-      this.currentTab === "Online Maps" ||
-      this.currentTab === "Ranked" ||
-      this.currentTab === "Legacy"
-    ) {
-      this.clearAllMaps();
-
-      MapButton.clearAllButtons();
-
-      this.updateScrollBounds();
-
-      this.currentPage = 1;
-      this.hasMorePages = true;
-      this.isLoadingMore = false;
-
-      this.loadBeatmaps(1);
-    } else if (this.currentTab === "Downloaded") {
-      this.filterDownloadedMaps();
-    } else if (LOCAL_LISTS.includes(this.currentTab)) {
-      this.filterFavoriteMaps();
-    }
-  }
-
   private handleSearchChangeDebounced(searchTerm: string): void {
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer);
@@ -916,110 +785,18 @@ export class MenuScene extends Scene {
 
     this.currentSearchTerm = searchTerm;
 
-    if (this.currentTab === "Downloaded") {
-      this.filterDownloadedMaps();
-      return;
-    }
-    if (LOCAL_LISTS.includes(this.currentTab)) {
-      this.filterFavoriteMaps();
+    if (
+      this.currentTab === "Downloaded" ||
+      LOCAL_LISTS.includes(this.currentTab)
+    ) {
+      this.filterLocalMaps();
       return;
     }
 
     this.searchDebounceTimer = setTimeout(() => {
-      this.handleSearchChange(searchTerm);
+      this.handleFiltersChange();
       this.searchDebounceTimer = null;
     }, 500);
-  }
-
-  private handleSearchChange(searchTerm: string): void {
-    if (
-      this.currentTab === "Online Maps" ||
-      this.currentTab === "Ranked" ||
-      this.currentTab === "Legacy"
-    ) {
-      this.clearAllMaps();
-
-      MapButton.clearAllButtons();
-
-      this.updateScrollBounds();
-
-      this.currentPage = 1;
-      this.hasMorePages = true;
-      this.isLoadingMore = false;
-
-      this.loadBeatmaps(1);
-    } else if (this.currentTab === "Downloaded") {
-      this.filterDownloadedMaps();
-    } else if (LOCAL_LISTS.includes(this.currentTab)) {
-      this.filterFavoriteMaps();
-    }
-  }
-
-  private filterDownloadedMaps(minStars?: number, maxStars?: number): void {
-    for (const button of this.mapButtons) {
-      button.destroy();
-    }
-    this.mapButtons = [];
-
-    MapButton.clearAllButtons();
-
-    const { minStars: currentMinStars, maxStars: currentMaxStars } =
-      this.drawerFilters.getStarFilterValues();
-    const { minDuration: currentMinDuration, maxDuration: currentMaxDuration } =
-      this.drawerFilters.getDurationFilterValues();
-    const finalMinStars = minStars !== undefined ? minStars : currentMinStars;
-    const finalMaxStars = maxStars !== undefined ? maxStars : currentMaxStars;
-
-    const filteredMaps = this.allDownloadedBeatmaps.filter((map) => {
-      const starRating = map.starRating || map.difficulty || 0;
-      const passesMinFilter = starRating >= finalMinStars;
-      const passesMaxFilter =
-        finalMaxStars >= 10 || starRating <= finalMaxStars;
-
-      const duration = map.length || 0;
-      const passesDurationMinFilter = duration >= currentMinDuration;
-      const passesDurationMaxFilter =
-        currentMaxDuration >= 300 || duration <= currentMaxDuration;
-
-      let passesTextFilter = true;
-      if (this.currentSearchTerm && this.currentSearchTerm.trim().length > 0) {
-        const searchTerm = this.currentSearchTerm.trim().toLowerCase();
-        const title = (map.title || "").toLowerCase();
-
-        passesTextFilter = title.includes(searchTerm);
-      }
-
-      return (
-        passesMinFilter &&
-        passesMaxFilter &&
-        passesDurationMinFilter &&
-        passesDurationMaxFilter &&
-        passesTextFilter
-      );
-    });
-
-    this.allBeatmaps = filteredMaps;
-    this.currentMaps = [...filteredMaps];
-
-    if (this.alternativeViewMode) {
-      this.createSquareCards();
-    } else {
-      const topBarHeight = this.topBar.getHeight();
-      for (let i = 0; i < this.allBeatmaps.length; i++) {
-        const button = createMapButton({
-          mapContents: this.allBeatmaps[i],
-          y: topBarHeight + this.topBarPadding + i * this.buttonHeight,
-          index: i,
-        });
-        this.mapButtons.push(button);
-      }
-    }
-
-    this.updateScrollBounds();
-
-    logger(
-      `🔍 Filtered: ${this.allBeatmaps.length}/${this.allDownloadedBeatmaps.length} downloaded maps`,
-    );
   }
 
   private clearAllMaps(): void {
@@ -1039,104 +816,21 @@ export class MenuScene extends Scene {
 
   private async loadDownloadedMaps(): Promise<void> {
     try {
-      if (this.allDownloadedBeatmaps.length > 0) {
-        logger(
-          `📂 Using cached: ${this.allDownloadedBeatmaps.length} downloaded maps`,
-        );
-
-        this.allBeatmaps = [...this.allDownloadedBeatmaps];
-        this.currentMaps = [...this.allDownloadedBeatmaps];
-
-        if (this.alternativeViewMode) {
-          logger(
-            `Downloaded maps (cached): Creating square cards for ${this.allBeatmaps.length} maps`,
-          );
-          this.createSquareCards();
-        } else {
-          logger(
-            `Downloaded maps (cached): Creating map buttons for ${this.allBeatmaps.length} maps`,
-          );
-          const topBarHeight = this.topBar.getHeight();
-          for (let i = 0; i < this.allBeatmaps.length; i++) {
-            const button = createMapButton({
-              mapContents: this.allBeatmaps[i],
-              y: topBarHeight + this.topBarPadding + i * this.buttonHeight,
-              index: i,
-            });
-            this.mapButtons.push(button);
-          }
-        }
-
-        this.updateScrollBounds();
-        return;
-      }
-
-      const preloadedMaps = (global as any).preloadedDownloadedMaps as
-        | BeatmapData[]
-        | undefined;
-
-      if (preloadedMaps && preloadedMaps.length > 0) {
-        logger(`⚡ Loading ${preloadedMaps.length} preloaded downloaded maps`);
-
-        this.allDownloadedBeatmaps = [...preloadedMaps];
-        this.allBeatmaps = [...preloadedMaps];
-        this.currentMaps = [...preloadedMaps];
-
-        if (this.alternativeViewMode) {
-          logger(
-            `Preloaded maps: Creating square cards for ${this.allBeatmaps.length} maps`,
-          );
-          this.createSquareCards();
-        } else {
-          logger(
-            `Preloaded maps: Creating map buttons for ${this.allBeatmaps.length} maps`,
-          );
-          const topBarHeight = this.topBar.getHeight();
-          for (let i = 0; i < this.allBeatmaps.length; i++) {
-            const button = createMapButton({
-              mapContents: this.allBeatmaps[i],
-              y: topBarHeight + this.topBarPadding + i * this.buttonHeight,
-              index: i,
-            });
-            this.mapButtons.push(button);
-          }
-        }
-
-        this.updateScrollBounds();
-
+      if (this.allDownloadedBeatmaps.length === 0) {
+        const preloadedMaps = (global as any).preloadedDownloadedMaps as
+          | BeatmapData[]
+          | undefined;
         delete (global as any).preloadedDownloadedMaps;
-
-        return;
-      }
-
-      this.popup.startLoading("Loading downloaded maps...");
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const listed = Maps.listDownloadedBeatmaps();
-      this.allBeatmaps = [...listed];
-      this.allDownloadedBeatmaps = [...listed];
-      this.currentMaps = [...listed];
-      if (!this.alternativeViewMode) {
-        const topBarHeight = this.topBar.getHeight();
-        for (let i = 0; i < this.allBeatmaps.length; i++) {
-          const button = createMapButton({
-            mapContents: this.allBeatmaps[i],
-            y: topBarHeight + this.topBarPadding + i * this.buttonHeight,
-            index: i,
-          });
-          this.mapButtons.push(button);
+        if (preloadedMaps && preloadedMaps.length > 0) {
+          this.allDownloadedBeatmaps = [...preloadedMaps];
+        } else {
+          this.popup.startLoading("Loading downloaded maps...");
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          this.allDownloadedBeatmaps = Maps.listDownloadedBeatmaps();
         }
       }
-
-      if (this.alternativeViewMode) {
-        this.createSquareCards();
-      }
-
-      this.updateScrollBounds();
-
-      logger(`✅ Loaded ${this.allBeatmaps.length} downloaded maps`);
-
+      this.filterLocalMaps();
+      logger(`✅ Loaded ${this.allDownloadedBeatmaps.length} downloaded maps`);
       this.popup.endLoading();
     } catch (error) {
       console.error("Failed to load downloaded maps:", error);
@@ -1549,7 +1243,8 @@ export class MenuScene extends Scene {
     const drawerOpen =
       this.drawerFilters.isDrawerOpen() ||
       this.profileDrawer.isDrawerOpen() ||
-      this.leaderboardsDrawer.isDrawerOpen();
+      this.leaderboardsDrawer.isDrawerOpen() ||
+      this.settingsDrawer.isDrawerOpen();
     const resultsBlocking = this.resultsOverlay?.isBlocking?.() || false;
     const menuOpen = (this.topBar as any)?.isMenuOpen?.() || false;
     return drawerOpen || resultsBlocking || menuOpen;

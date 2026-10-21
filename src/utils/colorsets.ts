@@ -120,6 +120,17 @@ export function importColorset(pickedPath: string): ColorsetInfo | null {
   }
 }
 
+export function saveColorset(name: string, colors: Color[]): void {
+  const hex = (c: Color) =>
+    [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  fs.writeFileSync(
+    path.join(ensureColorsetsDir(), `${name}.txt`),
+    colors.map(hex).join("\n")
+  );
+  noteColorManager.removeCustomPalette(name);
+  noteColorManager.addCustomPalette({ name, colors });
+}
+
 export function removeColorsetByName(name: string): boolean {
   const dir = ensureColorsetsDir();
   try {

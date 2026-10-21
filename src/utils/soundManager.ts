@@ -48,7 +48,9 @@ export function playFx(path: string, volume?: number): void {
     let sound = soundCache.get(path);
 
     if (!sound) {
-      sound = LoadSound("./public" + path);
+      sound = LoadSound(
+        path.startsWith(ConfigManager.getAppDataDir()) ? path : "./public" + path,
+      );
 
       if (!sound) {
         console.error(`Failed to load sound: ${path}`);
@@ -68,6 +70,24 @@ export function playFx(path: string, volume?: number): void {
 
     soundCache.delete(path);
   }
+}
+
+const SOUND_EFFECT_DEFAULTS = {
+  hit: "/hit.wav",
+  miss: "",
+  fail: "/fail.ogg",
+  retry: "/restart.wav",
+};
+
+export type SoundEffectKind = keyof typeof SOUND_EFFECT_DEFAULTS;
+
+export function getSoundEffect(kind: SoundEffectKind): string {
+  return ConfigManager.getExtra(`sound.${kind}`, SOUND_EFFECT_DEFAULTS[kind]);
+}
+
+export function playSoundEffect(kind: SoundEffectKind): void {
+  const sound = getSoundEffect(kind);
+  if (sound) playFx(sound);
 }
 
 function loadMusic(path: string, fresh: boolean): Music | null {

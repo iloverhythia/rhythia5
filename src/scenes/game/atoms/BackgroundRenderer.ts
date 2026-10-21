@@ -84,6 +84,7 @@ export class BackgroundRenderer {
       : 0;
 
     if (
+      (effectiveSettings.coverOpacity ?? 0) <= 0 &&
       backgroundOpacity <= 0 &&
       rayOpacity <= 0 &&
       chevronOpacity <= 0 &&

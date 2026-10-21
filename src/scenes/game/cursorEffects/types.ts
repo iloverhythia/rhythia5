@@ -8,6 +8,10 @@ export interface CursorRendererConfig {
   rainbowRate?: number;
   rainbowOffset?: number;
   cursorOpacity?: number;
+  cursorColorRed?: number;
+  cursorColorGreen?: number;
+  cursorColorBlue?: number;
+  cursorTrailEnabled?: number;
   cursorRainbowEnabled?: number;
   starTrailEnabled?: number;
   starTrailDensity?: number;

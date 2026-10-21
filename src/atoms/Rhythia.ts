@@ -1,4 +1,4 @@
-import type { Camera3D, RenderTexture } from "raylib";
+import { SetTargetFPS, type Camera3D, type RenderTexture } from "raylib";
 
 import type { Scene } from "./Scene";
 import type { RenderScaleMode } from "./sysutils/constants";
@@ -101,6 +101,7 @@ export class Rhythia {
 
   static set maxFps(value: number) {
     state.maxFps = value;
+    SetTargetFPS(value);
   }
 
   static get targetMonitor(): number {
