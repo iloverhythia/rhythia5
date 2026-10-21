@@ -7,7 +7,11 @@ import {
 } from "../atoms/NoteRenderer";
 
 export class SpriteNoteRenderer extends BaseNoteRenderer {
-  constructor(config: NoteRenderConfig) {
+  constructor(
+    config: NoteRenderConfig,
+    private texture: string = "/square.png",
+    private external: boolean = false
+  ) {
     super(config);
   }
 
@@ -16,7 +20,7 @@ export class SpriteNoteRenderer extends BaseNoteRenderer {
 
     const noteSize = Vector2(state.size, state.size);
     drawSprite(
-      "/square.png",
+      this.texture,
       Vector3(-noteSize.x / 2, -noteSize.y / 2, 0),
       noteSize,
       {
@@ -24,7 +28,9 @@ export class SpriteNoteRenderer extends BaseNoteRenderer {
         g: state.color.g,
         b: state.color.b,
         a: Math.floor(state.alpha * 255),
-      }
+      },
+      undefined,
+      this.external
     );
 
     this.removeTransform();

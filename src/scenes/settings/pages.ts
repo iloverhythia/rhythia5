@@ -74,6 +74,8 @@ export interface SettingsPage {
 
 const pages = new Map<string, SettingsPage>();
 
+export const settingsNavigation = { open: (id: string): void => {} };
+
 export function registerSettingsPage(page: SettingsPage): void {
   pages.set(page.id, page);
 }
