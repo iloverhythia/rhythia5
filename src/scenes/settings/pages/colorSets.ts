@@ -46,8 +46,8 @@ const grid = skinGridRows({
     },
     {
       label: "Import",
-      onClick: () => {
-        const file = pickFile({ text: "txt" });
+      onClick: async () => {
+        const file = await pickFile({ text: "txt" });
         const info = file ? importColorset(file) : null;
         if (info) applyPalette(info.name);
         else if (file) notify("Invalid colorset file");

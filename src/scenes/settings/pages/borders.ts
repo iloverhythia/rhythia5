@@ -10,8 +10,8 @@ const grid = skinGridRows({
   buttons: [
     {
       label: "Import",
-      onClick: () => {
-        const file = pickFile({ images: "png" });
+      onClick: async () => {
+        const file = await pickFile({ images: "png" });
         if (file) ConfigManager.setExtra("borderSkin", addSkinFile("borderskins", file));
       },
     },
