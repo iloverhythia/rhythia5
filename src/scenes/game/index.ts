@@ -19,6 +19,10 @@ import {
   KEY_RIGHT_ALT,
   IsMouseButtonPressed,
   MOUSE_BUTTON_LEFT,
+  KEY_F1,
+  HideCursor,
+  ShowCursor,
+  GetFPS,
 } from "raylib";
 import { Scene } from "../../atoms/Scene";
 import { SoundSpaceMemoryMap } from "../../utils/storage/ssmm";
@@ -94,6 +98,7 @@ export class GameScene extends Scene {
   private replayObserver: ReplayObserver | null = null;
   private replayPlayer: ReplayPlayer | null = null;
   private replayEnded: boolean = false;
+  private replayUiHidden: boolean = ConfigManager.getExtra("hideReplayUi", false);
 
   private getDisplayDestRect(): {
     destX: number;
@@ -213,6 +218,7 @@ export class GameScene extends Scene {
     } else {
       this.cursorLocked = false;
     }
+    if (this.replayPlayer && this.replayUiHidden) HideCursor();
 
     this.backInstructionObject = new GameObject({ zBase: 100 });
     this.backInstructionObject.onDraw = () => {};
@@ -228,6 +234,11 @@ export class GameScene extends Scene {
 
       if (IsKeyPressed(KEY_F3)) {
         this.gameLogic.toggleDebugMode();
+      }
+
+      if (this.replayPlayer && IsKeyPressed(KEY_F1)) {
+        this.replayUiHidden = !this.replayUiHidden;
+        (this.replayUiHidden ? HideCursor : ShowCursor)();
       }
 
       const gameState = this.gameLogic.getGameState();
@@ -479,8 +490,24 @@ export class GameScene extends Scene {
 
     if ((settings.hudModeIndicator ?? 1) > 0) this.drawModeOverlay();
     toastManager.draw();
+    if (this.replayObserver && ConfigManager.getExtra("showStats", false)) {
+      const { speed, topSpeed, recInterval } = this.replayObserver;
+      const fps = GetFPS();
+      [
+        "cursor speed",
+        `${speed.toFixed(1)} m/sec/${fps}fr`,
+        "",
+        "top speed",
+        `${topSpeed.toFixed(1)} m/sec/${fps}fr`,
+        "",
+        "rec interval",
+        `${Math.round(recInterval)}`,
+      ].forEach((line, i) =>
+        drawText(line, Vector2(20, Rhythia.gameHeight / 2 - 90 + i * 22), 20, { r: 229, g: 242, b: 255, a: 220 }),
+      );
+    }
     this.pauseOverlay.draw();
-    if (this.replayPlayer) {
+    if (this.replayPlayer && !this.replayUiHidden) {
       this.drawReplayBadge();
     }
   }
@@ -581,6 +608,7 @@ export class GameScene extends Scene {
 
   destroy(): void {
     this.gameRenderer.cleanup();
+    if (this.replayPlayer) ShowCursor();
 
     if (this.cursorLocked) {
       EnableCursor();

@@ -72,6 +72,7 @@ export function applyWindowSettings(): void {
     MaximizeWindow();
     setTimeout(() => ToggleFullscreen(), 50);
   }
+  SetTargetFPS(ConfigManager.getExtra("maxFpsMode", false) ? 0 : state.maxFps);
   if (ConfigManager.getExtra("vsync", false)) SetWindowState(FLAG_VSYNC_HINT);
   else ClearWindowState(FLAG_VSYNC_HINT);
 }
@@ -91,7 +92,7 @@ export function applyWindowIcon(): void {
 export function initializeWindow(config: any): void {
   state.targetMonitor = config.targetMonitor;
   state.maxFps = config.maxFps;
-  SetConfigFlags(FLAG_MSAA_4X_HINT);
+  if (!ConfigManager.getExtra("maxFpsMode", false)) SetConfigFlags(FLAG_MSAA_4X_HINT);
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   SetConfigFlags(FLAG_WINDOW_ALWAYS_RUN);
   SetConfigFlags(FLAG_BORDERLESS_WINDOWED_MODE);
@@ -105,6 +106,7 @@ export function initializeWindow(config: any): void {
   SetTargetFPS(state.maxFps);
   rlSetClipPlanes(0.01, 14000);
   applyWindowSettings();
+  if (ConfigManager.getExtra("autoMaximize", false)) MaximizeWindow();
 }
 
 function loadBloomShader(): void {

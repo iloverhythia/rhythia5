@@ -318,7 +318,7 @@ export class IntroScene extends Scene {
         },
         easings.easeOutQuad,
       ).onEnd(() => {
-        if (this.skipRequested) return;
+        if (this.skipRequested || !ConfigManager.getExtra("playMenuMusic", true)) return;
         if (SNOWFLAKES) {
           this.ensureMenuMusic();
         } else {
@@ -475,7 +475,7 @@ export class IntroScene extends Scene {
 
   private handleSkipInput(): void {
     if (this.showTutorial || this.skipRequested) return;
-    if (!IsKeyPressed(KEY_SPACE)) return;
+    if (!IsKeyPressed(KEY_SPACE) && !ConfigManager.getExtra("disableIntro", false)) return;
 
     this.skipRequested = true;
     logger("Intro skipped by user");
@@ -653,7 +653,7 @@ export class IntroScene extends Scene {
   }
 
   private ensureMenuMusic(): void {
-    if (this.musicStarted) return;
+    if (this.musicStarted || !ConfigManager.getExtra("playMenuMusic", true)) return;
     const halloweenPath = "./public/halloween-theme.mp3";
     const christmasPath = "./public/christmas.mp3";
     const fallbackPath = "./public/menu_loop.mp3";
