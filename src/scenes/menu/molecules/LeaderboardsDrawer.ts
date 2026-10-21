@@ -7,6 +7,7 @@ import { ProfileManager } from "../../../utils/profileManager";
 import { GameObject } from "../../../atoms/Object";
 import { playFx } from "../../../utils/soundManager";
 import { logger } from "../../../utils/logger";
+import { ConfigManager } from "../../../utils/configManager";
 
 interface LeaderboardEntry {
   flag: string | null;
@@ -270,7 +271,9 @@ export class LeaderboardsDrawer extends BaseDrawer {
         ? { r: 100, g: 200, b: 255, a: 255 * this.animationProgress }
         : { r: 220, g: 220, b: 220, a: 255 * this.animationProgress };
 
-      const displayName = username;
+      const displayName = ConfigManager.getExtra("streamer.hideUsernames", false)
+        ? "Player"
+        : username;
 
       drawText(
         displayName,

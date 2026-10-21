@@ -358,8 +358,9 @@ export class TopBar {
     const avatarX = MARGIN_X + 12;
     const avatarY = (this.barHeight - avatarSize) / 2;
     const hasProfile = this.profileStatus === "ready";
+    const hidden = ConfigManager.getExtra("streamer.hideProfile", false);
     const avatarUrl =
-      this.profileData?.avatar_url || this.profileData?.profile_image;
+      !hidden && (this.profileData?.avatar_url || this.profileData?.profile_image);
 
     if (hasProfile && avatarUrl) {
       drawSprite(
@@ -380,7 +381,7 @@ export class TopBar {
     const textX = avatarX + avatarSize + 10;
     const name =
       this.profileStatus === "ready"
-        ? this.profileData?.username || "Player"
+        ? (!hidden && this.profileData?.username) || "Player"
         : this.profileStatus === "loading"
         ? "Loading..."
         : "Log in";

@@ -148,7 +148,12 @@ export class GameRenderer {
 
     const rayOpacity = settings.rayOpacity ?? 1.0;
     const chevronOpacity = settings.chevronOpacity ?? 0.8;
-    if (backgroundOpacity === 0 && rayOpacity === 0 && chevronOpacity === 0)
+    if (
+      backgroundOpacity === 0 &&
+      rayOpacity === 0 &&
+      chevronOpacity === 0 &&
+      !settings.coverOpacity
+    )
       return;
 
     const approachDistance = settings.approachDistance ?? 20;
@@ -476,6 +481,10 @@ export class GameRenderer {
     this.cursorRenderer.updateConfig({
       cursorScale: settings.cursorScale ?? 1.0,
       cursorOpacity: settings.cursorOpacity ?? 1.0,
+      cursorColorRed: settings.cursorColorRed ?? 255,
+      cursorColorGreen: settings.cursorColorGreen ?? 255,
+      cursorColorBlue: settings.cursorColorBlue ?? 255,
+      cursorTrailEnabled: settings.cursorTrailEnabled ?? 1,
       fadeRate: settings.cursorTrailFadeRate ?? 0.5,
       mouseBoundRate: settings.mouseBoundRate ?? 1.0,
       mouseSensitivity: settings.mouseSensitivity ?? 1.0,
@@ -493,7 +502,7 @@ export class GameRenderer {
 
       customCursorEnabled: settings.customCursorEnabled ?? 0.0,
       customCursorOpacity: settings.customCursorOpacity ?? 1.0,
-      customCursorRotationSpeed: settings.customCursorRotationSpeed ?? 180.0,
+      customCursorRotationSpeed: (settings.cursorRotation ?? 0) * 72,
       customCursorTrailEnabled: settings.customCursorTrailEnabled ?? 0.0,
 
       spaceCursorEnabled: settings.spaceCursorEnabled ?? 0.0,
@@ -720,7 +729,8 @@ export class GameRenderer {
   }
 
   private updateAndRenderMissParticles(settings: Partial<GameSettings>): void {
-    const missOpacity = settings.missParticleOpacity ?? 0.8;
+    const missOpacity =
+      (settings.missParticleOpacity ?? 0.8) * (settings.missParticleEnabled ?? 1);
     if (missOpacity) {
       const deltaTimeMs = GetFrameTime() * 1000;
       this.missParticleSystem.update(deltaTimeMs);

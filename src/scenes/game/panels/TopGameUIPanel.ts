@@ -10,6 +10,7 @@ import { drawText } from "../../../utils/text";
 import { Rhythia } from "../../../atoms/Rhythia";
 import { SoundSpaceMemoryMap } from "../../../utils/storage/ssmm";
 import { GameUIPanel, GameUIPanelCommonArgs } from "./GameUIPanel";
+import { ConfigManager } from "../../../utils/configManager";
 
 export interface TopPanelArgs extends GameUIPanelCommonArgs {
   mapData: SoundSpaceMemoryMap | null;
@@ -47,7 +48,10 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
     const textOpacity = Math.round(255 * (uiOpacity * 5));
 
     const mapName = args.mapData?.title || "Unknown Map";
-    if ((args.settings?.hudMapTitle ?? 1) > 0) {
+    if (
+      (args.settings?.hudMapTitle ?? 1) > 0 &&
+      !ConfigManager.getExtra("streamer.hideMapTitles", false)
+    ) {
       drawText(
         mapName,
         Vector2(0, -35),

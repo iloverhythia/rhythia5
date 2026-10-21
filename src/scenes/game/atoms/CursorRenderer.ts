@@ -324,6 +324,12 @@ export class CursorRenderer {
       customCursorOpacity,
     } = this.preparedState;
 
+    const tint = {
+      r: this.config.cursorColorRed ?? 255,
+      g: this.config.cursorColorGreen ?? 255,
+      b: this.config.cursorColorBlue ?? 255,
+    };
+
     rlPushMatrix();
     rlTranslatef(0, 0, planeZ);
 
@@ -340,7 +346,7 @@ export class CursorRenderer {
         this.customCursorPath!,
         cursorPosition,
         Vector2(8 * totalScale, 8 * totalScale),
-        { r: 255, g: 255, b: 255, a: cursorAlpha },
+        { ...tint, a: cursorAlpha },
         this.customCursorCacheKey,
         true,
         true,
@@ -357,7 +363,7 @@ export class CursorRenderer {
           cursorPosition.y - 4 * totalScale
         ),
         Vector2(8 * totalScale, 8 * totalScale),
-        { r: 255, g: 255, b: 255, a: Math.round(255 * opacity) }
+        { ...tint, a: Math.round(255 * opacity) }
       );
     }
 

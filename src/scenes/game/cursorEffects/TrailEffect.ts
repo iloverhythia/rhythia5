@@ -67,7 +67,10 @@ export class TrailEffect implements CursorEffect {
   private trailTimer = 0;
 
   update(context: CursorEffectContext): void {
-    if ((context.config.customCursorTrailEnabled ?? 0) >= 0.5) {
+    if (
+      (context.config.customCursorTrailEnabled ?? 0) >= 0.5 ||
+      (context.config.cursorTrailEnabled ?? 1) < 0.5
+    ) {
       this.points.length = 0;
       return;
     }
@@ -80,7 +83,10 @@ export class TrailEffect implements CursorEffect {
   }
 
   render(context: CursorEffectContext): void {
-    if ((context.config.customCursorTrailEnabled ?? 0) >= 0.5) {
+    if (
+      (context.config.customCursorTrailEnabled ?? 0) >= 0.5 ||
+      (context.config.cursorTrailEnabled ?? 1) < 0.5
+    ) {
       return;
     }
     this.drawTrail(context.config);
@@ -158,7 +164,12 @@ export class TrailEffect implements CursorEffect {
       const rainbowRate = config.rainbowRate ?? 0;
       const rainbowOffset = config.rainbowOffset ?? 0;
       const rainbowEnabled = (config.cursorRainbowEnabled ?? 1) >= 0.5;
-      let color = { r: 255, g: 255, b: 255, a: Math.round(255 * opacity) };
+      let color = {
+        r: config.cursorColorRed ?? 255,
+        g: config.cursorColorGreen ?? 255,
+        b: config.cursorColorBlue ?? 255,
+        a: Math.round(255 * opacity),
+      };
 
       if (rainbowEnabled && rainbowRate > 0) {
         const hue = (point1.age * rainbowRate * 360 + rainbowOffset) % 360;
