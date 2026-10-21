@@ -4,7 +4,7 @@ import { drawSprite } from "../../../utils/sprite";
 import { drawText, measureText } from "../../../utils/text";
 import { Rhythia } from "../../../atoms/Rhythia";
 import { AccentColor } from "../../../utils/imageBlur";
-import { tintWithAccent, accentWithHover } from "../../../utils/colors";
+import { tintWithAccent } from "../../../utils/colors";
 import { lerpDelta } from "../../../utils/lerp";
 
 export type ContextMenuItemId =
@@ -30,15 +30,12 @@ export interface TopContextMenuCallbacks {
 
 export class TopContextMenu {
   private overlay: GameObject;
-  private buttonX: number = 0;
-  private barHeight: number = 70;
+  private anchor: Vector2 = Vector2(0, 0);
   private accentColor: AccentColor | null = null;
 
   private isOpen = false;
   private animProgress = 0;
   private menuRect: { x: number; y: number; w: number; h: number } | null = null;
-  private isHovered = false;
-  private hoverProgress = 0;
 
   private callbacks: TopContextMenuCallbacks;
 
@@ -136,46 +133,11 @@ export class TopContextMenu {
     };
   }
 
-  public setButtonX(x: number): void { this.buttonX = x; }
-  public setBarHeight(h: number): void { this.barHeight = h; }
   public setAccentColor(c: AccentColor | null): void { this.accentColor = c; }
 
-  public updateHover(mousePos: Vector2 | null): void {
-    const iconSize = 32;
-    const hovered = !!(mousePos && mousePos.y >= 0 && mousePos.y <= this.barHeight && mousePos.x >= this.buttonX && mousePos.x <= this.buttonX + iconSize);
-    this.isHovered = hovered;
-    this.hoverProgress = lerpDelta(this.hoverProgress, hovered ? 1 : 0, 0.2);
-  }
-
-  public handleTopBarClick(mousePos: Vector2 | null): boolean {
-    if (!mousePos) return false;
-    const iconSize = 32;
-    if (mousePos.y <= this.barHeight && mousePos.x >= this.buttonX && mousePos.x <= this.buttonX + iconSize) {
-      this.toggle(!this.isOpen);
-      return true;
-    }
-    return false;
-  }
-
-  public drawTopBarButton(): void {
-    const iconSize = 32;
-    const buttonY = (this.barHeight - iconSize) / 2;
-    const color = accentWithHover(
-      { r: 180, g: 180, b: 180 },
-      this.accentColor,
-      0.3,
-      this.hoverProgress
-    );
-    const dotSize = 4;
-    const gap = 6;
-    const centerX = this.buttonX + iconSize / 2 - dotSize / 2;
-    const centerY = buttonY + iconSize / 2 - dotSize / 2;
-
-    drawSprite("/solid.png", Vector2(centerX, centerY - gap - dotSize), Vector2(dotSize, dotSize), color);
-    drawSprite("/solid.png", Vector2(centerX, centerY), Vector2(dotSize, dotSize), color);
-    drawSprite("/solid.png", Vector2(centerX, centerY + gap + dotSize), Vector2(dotSize, dotSize), color);
-
-    
+  public openAt(pos: Vector2): void {
+    this.anchor = pos;
+    this.isOpen = true;
   }
 
   public isOpenOrAnimating(): boolean { return this.isOpen || this.animProgress > 0.01; }
@@ -183,10 +145,6 @@ export class TopContextMenu {
   private toggle(state: boolean): void { this.isOpen = state; }
 
   private drawContextMenu(): void {
-    const iconSize = 32;
-    const anchorX = this.buttonX + iconSize - 4;
-    const anchorY = this.barHeight + 2;
-
     const fontSize = 20;
     const padX = 14;
     const padY = 10;
@@ -198,13 +156,8 @@ export class TopContextMenu {
     const itemHeights = measured.map((m) => m.h + padY * 2);
     const menuHeight = itemHeights.reduce((a, h) => a + h, 0);
 
-    let panelX = anchorX - menuWidth;
-    const rightPadding = 12;
-    if (panelX + menuWidth > Rhythia.gameWidth - rightPadding) panelX = Rhythia.gameWidth - rightPadding - menuWidth;
-    if (panelX < rightPadding) panelX = rightPadding;
-    let panelY = anchorY;
-    const bottomPadding = 12;
-    if (panelY + menuHeight > Rhythia.gameHeight - bottomPadding) panelY = Math.max(8, this.barHeight - menuHeight - 8);
+    const panelX = Math.min(this.anchor.x, Rhythia.gameWidth - 12 - menuWidth);
+    const panelY = Math.max(8, Math.min(this.anchor.y, Rhythia.gameHeight - 12 - menuHeight));
 
     const ease = this.animProgress;
     const slideOffset = (1 - ease) * -10;

@@ -1,459 +1,270 @@
-import { Vector2, IsMouseButtonPressed, MOUSE_BUTTON_LEFT } from "raylib";
-import { Rhythia } from "../../../atoms/Rhythia";
-import { createDualSlider, DualSlider } from "../atoms/DualSlider";
+import { Vector2, IsMouseButtonDown, MOUSE_BUTTON_LEFT } from "raylib";
+import { PANEL } from "../atoms/BaseDrawer";
+import {
+  PanelDrawer,
+  Hit,
+  hovered,
+  drawCard,
+  drawField,
+  drawToggle,
+} from "../atoms/PanelDrawer";
 import { ConfigManager } from "../../../utils/configManager";
-import { AccentColor } from "../../../utils/imageBlur";
-import { BaseDrawer } from "../atoms/BaseDrawer";
-import { GameObject } from "../../../atoms/Object";
 import { drawSprite } from "../../../utils/sprite";
-import { drawText } from "../../../utils/text";
-import { lerpDelta } from "../../../utils/lerp";
-import { playFx } from "../../../utils/soundManager";
-import { logger } from "../../../utils/logger";
+import { drawText, measureText } from "../../../utils/text";
+import { drawRect } from "../../../ui/draw";
+import { clamp } from "../../../utils/lerp";
+import { BeatmapData } from "../../../utils/types";
+import { getPlayedMapIds } from "../../../utils/storage/localScores";
+import type { Rect, SettingsRow } from "../../settings/pages";
 
-export type SortOption = "length" | "starRating" | "difficulty" | "none";
-export type SortDirection = "asc" | "desc";
+export const STAR_LIMIT = 15;
+export const LENGTH_LIMIT = 1200;
 
-interface SortButton {
-  gameObject: GameObject;
-  option: SortOption;
-  label: string;
-  isActive: boolean;
-  direction: SortDirection;
-  hoverProgress: number;
-}
+const DEFAULT_FILTERS = {
+  sortBy: "stars",
+  ascending: false,
+  groupBy: "none",
+  ranked: true,
+  unranked: true,
+  approved: true,
+  explicit: true,
+  onlyPlayed: false,
+  minStars: 0,
+  maxStars: STAR_LIMIT,
+  minLength: 0,
+  maxLength: LENGTH_LIMIT,
+};
 
-export class DrawerFilters extends BaseDrawer {
-  private starRatingFilter: DualSlider | null = null;
-  private durationFilter: DualSlider | null = null;
-  private sortButtons: SortButton[] = [];
-  private activeSortOption: SortOption = "none";
-  private sortDirection: SortDirection = "asc";
-  private sortingEnabled: boolean = false;
+export type MapFilters = typeof DEFAULT_FILTERS;
+type Key = (map: BeatmapData) => number | string;
+type Row = Extract<SettingsRow, { kind: "button" | "select" | "toggle" | "slider" }>;
 
-  onStarFilterChange = (minStars: number, maxStars: number) => {};
-  onDurationFilterChange = (minDuration: number, maxDuration: number) => {};
-  onSortChange = (option: SortOption, direction: SortDirection) => {};
+const statusOf = (map: BeatmapData) => {
+  const status = (map.status || "").toUpperCase();
+  return status === "RANKED" ? "ranked" : status === "APPROVED" ? "approved" : "unranked";
+};
 
-  constructor() {
-    super(600); 
-    this.createFilters();
-    this.createSortButtons();
+const SORTS: Record<string, { label: string; key: Key }> = {
+  stars: { label: "Stars", key: (map) => map.starRating || 0 },
+  length: { label: "Length", key: (map) => map.length || 0 },
+  title: { label: "Title", key: (map) => (map.title || "").toLowerCase() },
+  mapper: { label: "Mapper", key: (map) => (map.ownerUsername || "").toLowerCase() },
+  difficulty: { label: "Difficulty", key: (map) => map.difficulty || 0 },
+  date: { label: "Date added", key: (map) => map.created_at || "" },
+};
+
+const GROUPS: Record<string, { label: string; key: Key }> = {
+  none: { label: "None", key: () => 0 },
+  status: { label: "Status", key: statusOf },
+  mapper: SORTS.mapper,
+  stars: { label: "Stars", key: (map) => Math.floor(map.starRating || 0) },
+  difficulty: SORTS.difficulty,
+};
+
+const compare = (a: number | string, b: number | string) => (a < b ? -1 : a > b ? 1 : 0);
+
+const clock = (seconds: number) =>
+  `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
+
+export class DrawerFilters extends PanelDrawer {
+  private filters: MapFilters = {
+    ...DEFAULT_FILTERS,
+    ...ConfigManager.getExtra<Partial<MapFilters>>("mapFilters", {}),
+  };
+  private sortingEnabled: boolean = true;
+  private drag: { row: Extract<SettingsRow, { kind: "slider" }>; x0: number; x1: number; value: number } | null = null;
+
+  onChange = () => {};
+
+  protected getHeaderText(): string {
+    return "Sort & Filter";
   }
 
-  getHeaderText(): string {
-    return "Filters";
+  protected getSubtitleText(): string {
+    return "Adjust how maps are sorted and grouped";
   }
 
-  drawContent(): void {
-    drawText("Preferences", Vector2(40, 110), 32, {
-      r: 200,
-      g: 200,
-      b: 200,
-      a: this.animationProgress * 255,
+  private setFilters(changes: Partial<MapFilters>): void {
+    this.filters = { ...this.filters, ...changes };
+    ConfigManager.setExtra("mapFilters", this.filters);
+    this.onChange();
+  }
+
+  private rows(): Row[] {
+    const select = (label: string, key: "sortBy" | "groupBy", table: typeof SORTS): Row => ({
+      kind: "select",
+      label,
+      options: () => Object.entries(table).map(([id, option]) => ({ id, label: option.label })),
+      get: () => this.filters[key],
+      set: (id) => this.setFilters({ [key]: id }),
     });
-
-    if (this.sortingEnabled) {
-      drawText("Sort By", Vector2(40, 340), 32, {
-        r: 200,
-        g: 200,
-        b: 200,
-        a: this.animationProgress * 255,
-      });
-    }
-  }
-
-  private createFilters(): void {
-    const filterWidth = 520; 
-    const leftMargin = 40; 
-    const topMargin = 180; 
-    const spacing = 100; 
-
-    const config = ConfigManager.get();
-    const durationY = topMargin;
-
-    const initialX = -this.drawerWidth + leftMargin;
-
-    this.durationFilter = createDualSlider({
-      position: Vector2(initialX, durationY),
-      width: filterWidth,
-      height: 4,
-      minValue: 0,
-      maxValue: 300, 
-      initialMinValue: config.durationFilterMin || 0,
-      initialMaxValue: config.durationFilterMax || 300,
-      label: "Duration Filter",
-      showValues: true,
-      precision: 0,
-      valueFormatter: (seconds: number) => {
-        const roundedSeconds = Math.round(seconds / 5) * 5;
-        const minutes = Math.floor(roundedSeconds / 60);
-        const remainingSeconds = roundedSeconds % 60;
-
-        if (roundedSeconds === 0) {
-          return "0";
-        } else if (minutes === 0) {
-          return `${remainingSeconds}s`;
-        } else {
-          return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-        }
-      },
-      onValueChange: (minDuration, maxDuration) => {
-        ConfigManager.setDurationFilter(minDuration, maxDuration);
-        this.onDurationFilterChange(minDuration, maxDuration);
-      },
+    const toggle = (
+      label: string,
+      key: "ascending" | "ranked" | "unranked" | "approved" | "explicit" | "onlyPlayed",
+      onLabel: string = "Show",
+      offLabel: string = onLabel
+    ): Row => ({
+      kind: "toggle",
+      label,
+      onLabel,
+      offLabel,
+      get: () => this.filters[key],
+      set: (value) => this.setFilters({ [key]: value }),
     });
-
-    const starY = durationY + spacing;
-
-    this.starRatingFilter = createDualSlider({
-      position: Vector2(initialX, starY),
-      width: filterWidth,
-      height: 4,
-      minValue: 0,
-      maxValue: 10,
-      initialMinValue: config.starFilterMin,
-      initialMaxValue: config.starFilterMax,
-      label: "Star Filter",
-      showValues: true,
-      precision: 1,
-      onValueChange: (minStars, maxStars) => {
-        ConfigManager.setStarFilter(minStars, maxStars);
-        this.onStarFilterChange(minStars, maxStars);
-      },
+    const slider = (
+      label: string,
+      key: "minStars" | "maxStars" | "minLength" | "maxLength",
+      max: number,
+      step: number,
+      format: (value: number) => string,
+      maxLabel?: string
+    ): Row => ({
+      kind: "slider",
+      label,
+      min: 0,
+      max,
+      step,
+      format,
+      maxLabel,
+      get: () => this.filters[key],
+      set: (value) => this.setFilters({ [key]: value }),
     });
+    const stars = (value: number) => String(Math.round(value * 10) / 10);
 
-    if (this.durationFilter) {
-      const durationGO = this.durationFilter.getGameObject();
-      durationGO.zBase = 16; 
-    }
-    if (this.starRatingFilter) {
-      const starGO = this.starRatingFilter.getGameObject();
-      starGO.zBase = 16; 
-    }
-  }
-
-  private createSortButtons(): void {
-    const buttonWidth = 250;
-    const buttonHeight = 50;
-    const leftMargin = 40;
-    const topMargin = 380; 
-    const horizontalSpacing = 270;
-    const verticalSpacing = 60;
-
-    const sortOptions: { option: SortOption; label: string }[] = [
-      { option: "length", label: "Length" },
-      { option: "starRating", label: "Star Rating" },
-      { option: "difficulty", label: "Difficulty" },
-      { option: "none", label: "No Sort" },
+    return [
+      { kind: "button", label: "Reset filters", onClick: () => this.setFilters(DEFAULT_FILTERS) },
+      ...(this.sortingEnabled
+        ? [
+            select("Sort by", "sortBy", SORTS),
+            toggle("Sort order", "ascending", "Ascending", "Descending"),
+            select("Group by", "groupBy", GROUPS),
+          ]
+        : []),
+      toggle("Ranked", "ranked"),
+      toggle("Unranked", "unranked"),
+      toggle("Approved", "approved"),
+      toggle("Explicit", "explicit"),
+      toggle("Played maps", "onlyPlayed", "Only played"),
+      slider("Min stars", "minStars", STAR_LIMIT, 0.1, stars),
+      slider("Max stars", "maxStars", STAR_LIMIT, 0.1, stars, "∞"),
+      slider("Min length", "minLength", LENGTH_LIMIT, 5, clock),
+      slider("Max length", "maxLength", LENGTH_LIMIT, 5, clock, "∞"),
     ];
-
-    sortOptions.forEach((sortOption, index) => {
-      const row = Math.floor(index / 2);
-      const col = index % 2;
-      const x = -this.drawerWidth + leftMargin + col * horizontalSpacing;
-      const y = topMargin + row * verticalSpacing;
-
-      const gameObject = new GameObject({ zBase: 16 });
-      gameObject.attachRect({
-        pos: { x, y },
-        size: { x: buttonWidth, y: buttonHeight },
-      });
-
-      const button: SortButton = {
-        gameObject,
-        option: sortOption.option,
-        label: sortOption.label,
-        isActive: sortOption.option === this.activeSortOption,
-        direction:
-          sortOption.option === this.activeSortOption
-            ? this.sortDirection
-            : "asc",
-        hoverProgress: 0,
-      };
-
-      gameObject.rectArea!.onClick = () => {
-        this.handleSortButtonClick(button);
-        return true; 
-      };
-
-      gameObject.rectArea!.onHoverStart = () => {
-        playFx("/click.wav", 0.1);
-      };
-
-      gameObject.onDraw = () => this.drawSortButton(button);
-      gameObject.onUpdate = () => this.updateSortButton(button);
-
-      this.sortButtons.push(button);
-    });
   }
 
-  private handleSortButtonClick(button: SortButton): void {
-    if (!this.sortingEnabled) return;
-
-    playFx("/click.wav", 0.3);
-
-    if (button.isActive) {
-      if (button.option !== "none") {
-        button.direction = button.direction === "asc" ? "desc" : "asc";
-      }
-    } else {
-      this.sortButtons.forEach((b) => {
-        b.isActive = false;
-      });
-
-      button.isActive = true;
-      button.direction = "asc"; 
-    }
-
-    this.activeSortOption = button.option;
-    this.sortDirection = button.direction;
-    this.onSortChange(button.option, button.direction);
-  }
-
-  private updateSortButton(button: SortButton): void {
-    const mousePos = button.gameObject.getMousePosition();
-    const isHovered =
-      mousePos &&
-      button.gameObject.rectArea &&
-      mousePos.x >= button.gameObject.rectArea.pos.x &&
-      mousePos.x <=
-        button.gameObject.rectArea.pos.x + button.gameObject.rectArea.size.x &&
-      mousePos.y >= button.gameObject.rectArea.pos.y &&
-      mousePos.y <=
-        button.gameObject.rectArea.pos.y + button.gameObject.rectArea.size.y;
-
-    if (isHovered) {
-      button.hoverProgress = lerpDelta(button.hoverProgress, 1, 0.15);
-    } else {
-      button.hoverProgress = lerpDelta(button.hoverProgress, 0, 0.15);
-    }
-  }
-
-  private drawSortButton(button: SortButton): void {
-    if (this.animationProgress < 0.01) return;
-
-    if (!this.sortingEnabled) return;
-
-    const rect = button.gameObject.rectArea!;
-    const isHovered = button.hoverProgress > 0.01;
-
-    let bgAlpha = 0.2;
-    if (button.isActive) bgAlpha = 0.4;
-    if (isHovered) bgAlpha += button.hoverProgress * 0.1;
-
-    let bgColor = {
-      r: 100,
-      g: 100,
-      b: 100,
-      a: bgAlpha * this.animationProgress * 255,
-    };
-    if (this.accentColor && button.isActive) {
-      bgColor = {
-        r: this.accentColor.r,
-        g: this.accentColor.g,
-        b: this.accentColor.b,
-        a: bgAlpha * this.animationProgress * 255,
-      };
-    }
-
-    drawSprite(
-      "/solid.png",
-      Vector2(rect.pos.x, rect.pos.y),
-      Vector2(rect.size.x, rect.size.y),
-      bgColor
-    );
-
-    if (button.isActive) {
-      const borderColor = this.accentColor
-        ? {
-            r: this.accentColor.r,
-            g: this.accentColor.g,
-            b: this.accentColor.b,
-            a: 0.6 * this.animationProgress * 255,
-          }
-        : { r: 150, g: 150, b: 150, a: 0.6 * this.animationProgress * 255 };
-
-      drawSprite(
-        "/solid.png",
-        Vector2(rect.pos.x, rect.pos.y),
-        Vector2(rect.size.x, 2),
-        borderColor
-      );
-
-      drawSprite(
-        "/solid.png",
-        Vector2(rect.pos.x, rect.pos.y + rect.size.y - 2),
-        Vector2(rect.size.x, 2),
-        borderColor
-      );
-
-      drawSprite(
-        "/solid.png",
-        Vector2(rect.pos.x, rect.pos.y),
-        Vector2(2, rect.size.y),
-        borderColor
-      );
-
-      drawSprite(
-        "/solid.png",
-        Vector2(rect.pos.x + rect.size.x - 2, rect.pos.y),
-        Vector2(2, rect.size.y),
-        borderColor
-      );
-    }
-
-    const textColor = button.isActive
-      ? { r: 255, g: 255, b: 255, a: this.animationProgress * 255 }
-      : { r: 180, g: 180, b: 180, a: this.animationProgress * 255 };
-
-    drawText(
-      button.label,
-      Vector2(rect.pos.x + 15, rect.pos.y + 12),
-      28,
-      textColor
-    );
-
-    if (button.isActive && button.option !== "none") {
-      const arrowX = rect.pos.x + rect.size.x - 40;
-      const arrowY = rect.pos.y + rect.size.y / 2 - 8;
-      const arrow = button.direction === "asc" ? ">" : "<";
-      drawText(arrow, Vector2(arrowX, arrowY), 32, textColor);
-    }
-  }
-
-  onUpdate(): void {
-    const xOffset =
-      -this.drawerWidth + this.drawerWidth * this.animationProgress;
-    const leftMargin = 40;
-    const topMargin = 180;
-    const spacing = 100;
-
-    
-    
-    const shouldHideSliders = !this.isOpen || this.animationProgress < 0.05;
-
-    if (this.durationFilter) {
-      const durationGO = this.durationFilter.getGameObject();
-      if (shouldHideSliders) {
-        
-        this.durationFilter.setPosition(Vector2(-1_000_000, -1_000_000));
-        if (durationGO.rectArea) {
-          durationGO.rectArea.pos.x = -1_000_000;
-          durationGO.rectArea.pos.y = -1_000_000;
-        }
-      } else {
-        const sliderX = xOffset + leftMargin;
-        this.durationFilter.setPosition(Vector2(sliderX, topMargin));
-        if (durationGO.rectArea) {
-          durationGO.rectArea.pos.x = sliderX;
-          durationGO.rectArea.pos.y = topMargin;
-        }
+  protected onUpdate(): void {
+    const mouse = this.gameObject.getMousePosition();
+    if (this.drag && mouse) {
+      const { row, x0, x1 } = this.drag;
+      const ratio = clamp((mouse.x - x0) / (x1 - x0), 0, 1);
+      this.drag.value = Math.round((row.min + ratio * (row.max - row.min)) / row.step) * row.step;
+      if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        row.set(this.drag.value);
+        this.drag = null;
       }
     }
+    super.onUpdate();
+  }
 
-    if (this.starRatingFilter) {
-      const starGO = this.starRatingFilter.getGameObject();
-      if (shouldHideSliders) {
-        this.starRatingFilter.setPosition(Vector2(-1_000_000, -1_000_000));
-        if (starGO.rectArea) {
-          starGO.rectArea.pos.x = -1_000_000;
-          starGO.rectArea.pos.y = -1_000_000;
+  protected isScrollInteractionSuspended(): boolean {
+    return super.isScrollInteractionSuspended() || !!this.drag;
+  }
+
+  protected drawBody(column: Rect, mouse: Vector2 | null, hits: Hit[]): number {
+    let y = column.y;
+    for (const row of this.rows()) {
+      const card = { x: column.x, y, w: column.w, h: row.kind === "button" ? 44 : 100 };
+      y += card.h + 10;
+      if (!this.isVisible(card)) continue;
+
+      if (row.kind === "button") {
+        drawCard(card, hovered(card, mouse));
+        drawText(row.label, Vector2(card.x + card.w / 2, card.y + 12), 20, PANEL.text, "center");
+        hits.push({ rect: card, press: row.onClick });
+        continue;
+      }
+
+      drawCard(card);
+      drawText(row.label, Vector2(card.x + 15, card.y + 16), 22, PANEL.text);
+
+      if (row.kind === "select") {
+        const field = { x: card.x + 14, y: card.y + 46, w: card.w - 28, h: 38 };
+        const options = row.options();
+        drawField(field, options.find((option) => option.id === row.get())?.label ?? "", hovered(field, mouse));
+        hits.push({ rect: field, press: () => this.openDropdown(field, options, row.get(), row.set) });
+      } else if (row.kind === "toggle") {
+        const on = row.get();
+        const rect = drawToggle(card.x + 14, card.y + 52, on, (on ? row.onLabel : row.offLabel) ?? "");
+        hits.push({ rect, press: () => row.set(!on) });
+      } else if (row.kind === "slider") {
+        const value = this.drag?.row.label === row.label ? this.drag.value : row.get();
+        const format = row.format ?? String;
+        const minLabel = format(row.min);
+        const maxLabel = row.maxLabel ?? format(row.max);
+        const infinite = maxLabel === "∞";
+        const lineY = card.y + 62;
+        const x0 = card.x + 32 + measureText(minLabel, 18).width;
+        const x1 = card.x + card.w - 30 - (infinite ? 18 : measureText(maxLabel, 18).width);
+        const knobX = x0 + ((value - row.min) / (row.max - row.min)) * (x1 - x0);
+        drawText(row.maxLabel && value >= row.max ? "No limit" : format(value), Vector2(card.x + card.w - 15, card.y + 18), 20, PANEL.dim, "right");
+        drawText(minLabel, Vector2(card.x + 18, lineY - 9), 18, PANEL.text);
+        if (infinite) {
+          drawSprite("/icons/infinity.png", Vector2(card.x + card.w - 34, lineY - 9), Vector2(18, 18), PANEL.text);
+        } else {
+          drawText(maxLabel, Vector2(card.x + card.w - 16, lineY - 9), 18, PANEL.text, "right");
         }
-      } else {
-        const sliderX = xOffset + leftMargin;
-        this.starRatingFilter.setPosition(
-          Vector2(sliderX, topMargin + spacing)
+        drawRect(x0, lineY - 2, x1 - x0, 4, { r: 60, g: 60, b: 64, a: 255 });
+        drawRect(x0, lineY - 2, knobX - x0, 4, PANEL.text);
+        drawSprite("/circle.png", Vector2(knobX - 11, lineY - 11), Vector2(22, 22), PANEL.text);
+        hits.push({
+          rect: { x: x0 - 12, y: lineY - 16, w: x1 - x0 + 24, h: 32 },
+          press: () => (this.drag = { row, x0, x1, value }),
+        });
+      }
+    }
+    return y - 10;
+  }
+
+  public apply(maps: BeatmapData[]): BeatmapData[] {
+    const f = this.filters;
+    const played = f.onlyPlayed ? getPlayedMapIds() : null;
+    const sort = SORTS[f.sortBy] ?? SORTS.stars;
+    const group = GROUPS[f.groupBy] ?? GROUPS.none;
+    const direction = f.ascending ? 1 : -1;
+    return maps
+      .filter((map) => {
+        const stars = map.starRating || 0;
+        const length = map.length || 0;
+        return (
+          f[statusOf(map)] &&
+          (f.explicit || !/explicit/i.test(map.tags || "")) &&
+          (!played || played.has(String(map.id))) &&
+          stars >= f.minStars &&
+          (f.maxStars >= STAR_LIMIT || stars <= f.maxStars) &&
+          length >= f.minLength &&
+          (f.maxLength >= LENGTH_LIMIT || length <= f.maxLength)
         );
-        if (starGO.rectArea) {
-          starGO.rectArea.pos.x = sliderX;
-          starGO.rectArea.pos.y = topMargin + spacing;
-        }
-      }
-    }
-
-    if (this.sortingEnabled) {
-      const buttonTopMargin = 380;
-      const horizontalSpacing = 270;
-      const verticalSpacing = 60;
-
-      this.sortButtons.forEach((button, index) => {
-        const row = Math.floor(index / 2);
-        const col = index % 2;
-        const buttonX = xOffset + leftMargin + col * horizontalSpacing;
-        const buttonY = buttonTopMargin + row * verticalSpacing;
-
-        if (button.gameObject.rectArea) {
-          button.gameObject.rectArea.pos.x = buttonX;
-          button.gameObject.rectArea.pos.y = buttonY;
-        }
-      });
-    }
+      })
+      .sort(
+        (a, b) =>
+          direction * (compare(group.key(a), group.key(b)) || compare(sort.key(a), sort.key(b)))
+      );
   }
 
-  public setAccentColor(color: AccentColor | null): void {
-    logger(color);
-    super.setAccentColor(color);
-    if (this.starRatingFilter) {
-      this.starRatingFilter.setAccentColor(color);
-    }
-    if (this.durationFilter) {
-      this.durationFilter.setAccentColor(color);
-    }
-  }
-
-  public getStarFilterValues(): { minStars: number; maxStars: number } {
-    if (!this.starRatingFilter) {
-      return { minStars: 0, maxStars: 10 };
-    }
+  public apiParams(): { minStars?: number; maxStars?: number; minLength?: number; maxLength?: number; status?: string } {
+    const f = this.filters;
+    const statuses = (["ranked", "approved", "unranked"] as const).filter((status) => f[status]);
     return {
-      minStars: this.starRatingFilter.getMinValue(),
-      maxStars: this.starRatingFilter.getMaxValue(),
-    };
-  }
-
-  public getDurationFilterValues(): {
-    minDuration: number;
-    maxDuration: number;
-  } {
-    if (!this.durationFilter) {
-      return { minDuration: 0, maxDuration: 300 };
-    }
-    return {
-      minDuration: this.durationFilter.getMinValue(),
-      maxDuration: this.durationFilter.getMaxValue(),
-    };
-  }
-
-  public getSortOption(): { option: SortOption; direction: SortDirection } {
-    return {
-      option: this.activeSortOption,
-      direction: this.sortDirection,
+      minStars: f.minStars > 0 ? f.minStars : undefined,
+      maxStars: f.maxStars < STAR_LIMIT ? f.maxStars : undefined,
+      minLength: f.minLength > 0 ? f.minLength * 1000 : undefined,
+      maxLength: f.maxLength < LENGTH_LIMIT ? f.maxLength * 1000 : undefined,
+      status: statuses.length === 1 ? statuses[0].toUpperCase() : undefined,
     };
   }
 
   public setSortingEnabled(enabled: boolean): void {
     this.sortingEnabled = enabled;
-
-    this.sortButtons.forEach((button) => {
-      if (button.gameObject.rectArea) {
-        if (!enabled) {
-          button.gameObject.rectArea.pos.y = -1000;
-        }
-      }
-    });
-  }
-
-  public destroy(): void {
-    this.sortButtons.forEach((button) => {
-      button.gameObject.destroy();
-    });
-    if (this.starRatingFilter) {
-      this.starRatingFilter.destroy();
-    }
-    if (this.durationFilter) {
-      this.durationFilter.destroy();
-    }
   }
 }
 
