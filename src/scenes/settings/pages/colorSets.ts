@@ -1,12 +1,20 @@
 import type { Color } from "raylib";
+import { exec } from "child_process";
 import { registerSettingsPage, settingsNavigation, RGB, Rect } from "../pages";
 import { notify, pickFile, skinGridRows, textFieldRow } from "../skinGrid";
 import { ConfigManager } from "../../../utils/configManager";
 import { drawRect } from "../../../ui/draw";
 import { noteColorManager } from "../../../utils/noteColorPalette";
-import { importColorset, saveColorset } from "../../../utils/colorsets";
+import { getColorsetsDir, importColorset, saveColorset } from "../../../utils/colorsets";
 
-const draft = { name: "", colors: [] as RGB[] };
+const draft = { name: "", colors: [] as RGB[], mirror: false };
+
+const copySelected = () => {
+  const palette = noteColorManager.getCurrentPalette();
+  draft.name = `${palette.name} (copy)`;
+  draft.colors = palette.colors.map(({ r, g, b }) => ({ r, g, b }));
+  draft.mirror = !!palette.mirror;
+};
 
 const applyPalette = (name: string) => {
   const match = noteColorManager.getAllPalettes().find((palette) => palette.name === name);
@@ -39,8 +47,8 @@ const grid = skinGridRows({
     {
       label: "New",
       onClick: () => {
-        draft.name = "New Color Set";
-        draft.colors = noteColorManager.getCurrentPalette().colors.slice(0, 4).map(({ r, g, b }) => ({ r, g, b }));
+        copySelected();
+        draft.name = "";
         settingsNavigation.open("color-set-editor");
       },
     },
@@ -70,17 +78,32 @@ registerSettingsPage({
   subtitle: "Choose a color set",
   icon: "/icons/palette.png",
   group: "Skinning",
-  rows: () => grid,
+  rows: () => [
+    {
+      kind: "toggle",
+      label: "Random Colorset",
+      get: () => ConfigManager.getExtra("randomColorset", false),
+      set: (value) => ConfigManager.setExtra("randomColorset", value),
+      defaultValue: false,
+    },
+    ...grid,
+  ],
 });
 
 const nameRow = textFieldRow("Name", () => draft.name, (value) => (draft.name = value));
 
 registerSettingsPage({
   id: "color-set-editor",
-  title: "New Color Set",
+  title: "Colorset Maker",
   subtitle: "Pick the colors notes cycle through",
   rows: () => [
     nameRow,
+    {
+      kind: "toggle",
+      label: "Mirror (play colors back and forth)",
+      get: () => draft.mirror,
+      set: (value) => (draft.mirror = value),
+    },
     { kind: "section", label: "Colors" },
     ...draft.colors.map((_, i) => ({
       kind: "color" as const,
@@ -100,14 +123,24 @@ registerSettingsPage({
       half: true,
       onClick: () => draft.colors.length > 1 && draft.colors.pop(),
     },
+    { kind: "button", label: "Copy Selected Colorset", half: true, onClick: copySelected },
+    {
+      kind: "button",
+      label: "Open Colorsets Folder",
+      half: true,
+      onClick: () =>
+        exec(`${process.platform === "win32" ? "explorer" : process.platform === "darwin" ? "open" : "xdg-open"} "${getColorsetsDir()}"`),
+    },
     {
       kind: "button",
       label: "Save Color Set",
       onClick: () => {
-        const name = draft.name.replace(/[\\/:*?"<>|]/g, "").trim() || "Color Set";
-        saveColorset(name, draft.colors.map((color) => ({ ...color, a: 255 })));
+        const name = draft.name.replace(/[\\/:*?"<>|]/g, "").trim();
+        if (!name) return notify("Give it a name first");
+        const existed = noteColorManager.getAllPalettes().some((palette) => palette.name === name);
+        saveColorset(name, draft.colors.map((color) => ({ ...color, a: 255 })), draft.mirror);
         applyPalette(name);
-        notify(`Saved "${name}"`);
+        notify(existed ? `Updated "${name}"` : `Saved "${name}" and selected it`);
       },
     },
   ],

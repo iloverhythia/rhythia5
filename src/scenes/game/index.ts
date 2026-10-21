@@ -68,6 +68,7 @@ import { PaletteDrawer } from "../customization/molecules/PaletteDrawer";
 import type { CustomizationInventoryItem } from "../../utils/gameSettingsSchema";
 import { ReplayObserver } from "./ReplayObserver";
 import { ReplayPlayer } from "./ReplayPlayer";
+import { noteColorManager, type NoteColorPalette } from "../../utils/noteColorPalette";
 
 export class GameScene extends Scene {
   sceneName: string = "Game";
@@ -99,6 +100,7 @@ export class GameScene extends Scene {
   private replayPlayer: ReplayPlayer | null = null;
   private replayEnded: boolean = false;
   private replayUiHidden: boolean = ConfigManager.getExtra("hideReplayUi", false);
+  private paletteBeforeRandom: NoteColorPalette | null = null;
 
   private getDisplayDestRect(): {
     destX: number;
@@ -178,6 +180,11 @@ export class GameScene extends Scene {
     }
     this.exitCooldown = new Cooldown(0.4);
     this.shouldLockCursor = isStandalone && !this.replayPlayer;
+    if (this.shouldLockCursor && ConfigManager.getExtra("randomColorset", false)) {
+      const palettes = noteColorManager.getAllPalettes();
+      this.paletteBeforeRandom = noteColorManager.getCurrentPalette();
+      noteColorManager.setCurrentPalette(palettes[Math.floor(Math.random() * palettes.length)]);
+    }
     this.autoPlayEnabled = enableAutoPlay;
     if (this.autoPlayEnabled) {
       this.autoPlayController = new AutoPlayController(finalMapData ?? null);
@@ -626,6 +633,7 @@ export class GameScene extends Scene {
   destroy(): void {
     this.gameRenderer.cleanup();
     if (this.replayPlayer) ShowCursor();
+    if (this.paletteBeforeRandom) noteColorManager.setCurrentPalette(this.paletteBeforeRandom);
 
     if (this.cursorLocked) {
       EnableCursor();
