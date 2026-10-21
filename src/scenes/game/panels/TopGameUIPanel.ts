@@ -15,6 +15,7 @@ import { ConfigManager } from "../../../utils/configManager";
 export interface TopPanelArgs extends GameUIPanelCommonArgs {
   mapData: SoundSpaceMemoryMap | null;
   currentTime: number;
+  canSkip: boolean;
 }
 
 export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
@@ -22,7 +23,6 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
     rlPushMatrix();
 
     const uiOpacity = args.settings?.uiOpacity ?? 0.15;
-    const uiTiltRate = args.settings?.uiTiltRate ?? 1.0;
     const playfieldScale = args.settings?.playfieldScale ?? 1.0;
     const uiScale = args.settings?.uiScale ?? 1.0;
 
@@ -37,15 +37,12 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
     const depth = args.closeDistance;
     rlTranslatef(planeX, planeY, depth);
 
-    const tiltCompensation = 1 - uiTiltRate;
-    rlTranslatef(
-      args.cameraTiltX * 100 * tiltCompensation,
-      args.cameraTiltY * 100 * tiltCompensation,
-      0
-    );
+    this.applyTilt(args, (args.settings?.attachTimerToGrid ?? 0) > 0);
     rlScalef(uiScale, uiScale, 1.0);
 
     const textOpacity = Math.round(255 * (uiOpacity * 5));
+    const lastNote = args.mapData?.notes?.[args.mapData.notes.length - 1]?.[0] ?? Infinity;
+    const state = args.canSkip ? "Canskip" : args.currentTime > lastNote ? "Done" : "";
 
     const mapName = args.mapData?.title || "Unknown Map";
     if (
@@ -56,7 +53,7 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
         mapName,
         Vector2(0, -35),
         28,
-        { r: 255, g: 255, b: 255, a: textOpacity },
+        this.color(`timerText${state}` as const, textOpacity),
         "center"
       );
     }
@@ -86,7 +83,7 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
         timeDisplay,
         Vector2(0, -10),
         22,
-        { r: 200, g: 200, b: 200, a: textOpacity },
+        this.color(`timerText${state}` as const, textOpacity * 0.8),
         "center"
       );
     }
@@ -97,7 +94,8 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
         20,
         args.currentTime,
         args.mapData.duration,
-        uiOpacity
+        textOpacity,
+        state
       );
     }
 
@@ -109,7 +107,8 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
     y: number,
     currentTime: number,
     duration: number,
-    uiOpacity: number
+    textOpacity: number,
+    state: "" | "Done" | "Canskip"
   ): void {
     const barWidth = 300;
     const barHeight = 12;
@@ -121,7 +120,7 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
       "/solid.png",
       Vector2(centerX - barWidth / 2, y - barHeight / 2),
       Vector2(barWidth, barHeight),
-      { r: 60, g: 60, b: 60, a: Math.round(255 * uiOpacity * 2) }
+      this.color(`timerBg${state}` as const, textOpacity)
     );
 
     if (fillWidth > 0) {
@@ -129,7 +128,7 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
         "/solid.png",
         Vector2(centerX - barWidth / 2, y - barHeight / 2),
         Vector2(fillWidth, barHeight),
-        { r: 255, g: 255, b: 255, a: Math.round(255 * uiOpacity * 4) }
+        this.color(`timerFg${state}` as const, textOpacity)
       );
     }
   }

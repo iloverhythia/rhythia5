@@ -3,6 +3,7 @@ import { Color } from "raylib";
 export interface NoteColorPalette {
   colors: Color[];
   name: string;
+  mirror?: boolean;
 }
 
 export const DEFAULT_NOTE_COLOR_PALETTES: NoteColorPalette[] = [
@@ -66,7 +67,9 @@ export class NoteColorManager {
     if (colors.length === 0) {
       return { r: 255, g: 255, b: 255, a: 255 }; 
     }
-    return colors[noteIndex % colors.length];
+    const period = this.currentPalette.mirror && colors.length > 2 ? colors.length * 2 - 2 : colors.length;
+    const index = noteIndex % period;
+    return colors[index < colors.length ? index : period - index];
   }
 
   public getAllPalettes(): NoteColorPalette[] {

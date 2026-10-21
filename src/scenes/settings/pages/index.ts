@@ -1,12 +1,14 @@
 import "./system";
 import "./window";
 import "./interface";
+import "./uiColors";
 import "./keybinds";
 import "./cursor";
 import "./audio";
 import "./backgrounds";
 import "./favorites";
 import "./streamer";
+import "./replays";
 import "./notes";
 import "./hitEffects";
 import "./borders";

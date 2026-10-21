@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import { ConfigManager } from "../../../utils/configManager";
 import {
   getSoundEffect,
@@ -8,7 +10,8 @@ import {
   setMusicVolume,
   type SoundEffectKind,
 } from "../../../utils/soundManager";
-import { gameSettingSlider, registerSettingsPage, type SettingsRow } from "../pages";
+import { extraToggle, gameSettingSlider, registerSettingsPage, type SettingsRow } from "../pages";
+import { createPopup } from "../../menu/atoms/Popup";
 import { choiceRows, fileLabel, listImported, pickFileButton } from "../choices";
 
 const SOUND_EFFECTS: { kind: SoundEffectKind; label: string }[] = [
@@ -33,8 +36,8 @@ const BUILT_IN_SOUNDS = [
 
 const volumeSlider = (
   label: string,
-  key: "master" | "music" | "fx",
   defaultValue: number,
+  get: () => number,
   apply: (volume: number) => void
 ): SettingsRow => ({
   kind: "slider",
@@ -43,9 +46,61 @@ const volumeSlider = (
   max: 100,
   step: 1,
   defaultValue,
-  get: () => Math.round(getVolumes()[key] * 100),
+  get: () => Math.round(get() * 100),
   set: (value) => apply(value / 100),
+  format: (value) => `${value}% / ${Math.max(-80, 20 * Math.log10(value / 100)).toFixed(1)} dB`,
 });
+
+const extraSlider = (key: string, label: string, defaultValue: number): SettingsRow => ({
+  kind: "slider",
+  label,
+  min: 0.5,
+  max: 2,
+  step: 0.01,
+  defaultValue,
+  get: () => ConfigManager.getExtra(key, defaultValue),
+  set: (value) => ConfigManager.setExtra(key, value),
+});
+
+const replaceSelected = (from: string, to?: string) =>
+  SOUND_EFFECTS.forEach(({ kind }) => {
+    if (getSoundEffect(kind) === from) ConfigManager.setExtra(`sound.${kind}`, to);
+  });
+
+const customSoundRows = (): SettingsRow[] =>
+  listImported("sounds").flatMap(({ id, label }): SettingsRow[] => [
+    { kind: "button", label: `Play ${label}`, onClick: () => playFx(id), half: true },
+    {
+      kind: "button",
+      label: `Rename ${label}`,
+      half: true,
+      onClick: () =>
+        createPopup("prompt").showPrompt({
+          message: "Rename this sound",
+          initialValue: label,
+          placeholder: "Sound name",
+          onConfirm: (name) => {
+            if (!name.trim()) return;
+            const target = path.join(path.dirname(id), name.trim() + path.extname(id));
+            fs.renameSync(id, target);
+            replaceSelected(id, target);
+          },
+        }),
+    },
+    {
+      kind: "button",
+      label: `Delete ${label}`,
+      onClick: () =>
+        createPopup("confirm").showConfirm({
+          message: `Delete "${label}"? This can't be undone.`,
+          confirmText: "Delete",
+          onConfirm: () => {
+            fs.unlinkSync(id);
+            replaceSelected(id);
+          },
+        }),
+    },
+  ]);
 
 SOUND_EFFECTS.forEach(({ kind, label }) => {
   const select = (sound: string) => {
@@ -68,6 +123,8 @@ SOUND_EFFECTS.forEach(({ kind, label }) => {
         select
       ),
       pickFileButton("Import sound", { audio: "wav,ogg,mp3,flac" }, select, "sounds"),
+      { kind: "section", label: "Custom Sounds" },
+      ...customSoundRows(),
     ],
   });
 });
@@ -97,20 +154,40 @@ registerSettingsPage({
         half: true,
       })
     ),
+    extraToggle("sound.hit.enabled", "Hit Sound", true),
+    extraToggle("sound.miss.enabled", "Miss Sound", true),
+    extraToggle("sfx2d", "Disable Directional", false),
+    extraToggle("hitPitch", "Random Hit Pitch", false),
+    extraSlider("hitPitchMin", "Hit Pitch Min", 0.9),
+    extraSlider("hitPitchMax", "Hit Pitch Max", 1.15),
     { kind: "section", label: "Timing" },
-    gameSettingSlider("globalOffset", { label: "Global offset (ms)" }),
+    gameSettingSlider("globalOffset", { label: "Universal Offset (ms)" }),
+    { kind: "section", label: "Music" },
+    extraToggle("playMenuMusic", "Menu Music", true),
+    extraToggle("autoPreviewSong", "Auto Preview Songs", true),
     { kind: "section", label: "Volume" },
-    volumeSlider("Master Volume", "master", 20, (volume) => {
+    volumeSlider("Master Volume", 20, () => getVolumes().master, (volume) => {
       setMasterVolume(volume);
       ConfigManager.setVolumes(volume);
     }),
-    volumeSlider("Music Volume", "music", 100, (volume) => {
+    volumeSlider("Music Volume", 100, () => getVolumes().music, (volume) => {
       setMusicVolume(volume);
       ConfigManager.setVolumes(undefined, volume);
     }),
-    volumeSlider("Effects Volume", "fx", 80, (volume) => {
+    volumeSlider("Effects Volume", 80, () => getVolumes().fx, (volume) => {
       setFxVolume(volume);
       ConfigManager.setVolumes(undefined, undefined, volume);
     }),
+    ...(
+      [
+        ["hit", "Hit Volume"],
+        ["miss", "Miss Volume"],
+        ["fail", "Fail Volume"],
+      ] as const
+    ).map(([kind, label]) =>
+      volumeSlider(label, 100, () => ConfigManager.getExtra(`volume.${kind}`, 1), (volume) =>
+        ConfigManager.setExtra(`volume.${kind}`, volume)
+      )
+    ),
   ],
 });

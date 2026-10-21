@@ -12,6 +12,8 @@ import {
   SetMusicVolume,
   SetMusicPitch,
   SetSoundVolume,
+  SetSoundPan,
+  SetSoundPitch,
   UpdateMusicStream,
   GetMusicTimePlayed,
   GetMusicTimeLength,
@@ -43,7 +45,7 @@ export function initializeVolumes(): void {
   );
 }
 
-export function playFx(path: string, volume?: number): void {
+export function playFx(path: string, volume?: number, pan = 0.5, pitch = 1): void {
   try {
     let sound = soundCache.get(path);
 
@@ -63,6 +65,8 @@ export function playFx(path: string, volume?: number): void {
 
     const finalVolume = (volume ?? fxVolume) * masterVolume;
     SetSoundVolume(sound, finalVolume);
+    SetSoundPan(sound, pan);
+    SetSoundPitch(sound, pitch);
 
     PlaySound(sound);
   } catch (error) {
@@ -85,9 +89,16 @@ export function getSoundEffect(kind: SoundEffectKind): string {
   return ConfigManager.getExtra(`sound.${kind}`, SOUND_EFFECT_DEFAULTS[kind]);
 }
 
-export function playSoundEffect(kind: SoundEffectKind): void {
+export function playSoundEffect(kind: SoundEffectKind, x = 0): void {
   const sound = getSoundEffect(kind);
-  if (sound) playFx(sound);
+  if (!sound || !ConfigManager.getExtra(`sound.${kind}.enabled`, true)) return;
+  const [min, max] = [ConfigManager.getExtra("hitPitchMin", 0.9), ConfigManager.getExtra("hitPitchMax", 1.15)];
+  playFx(
+    sound,
+    fxVolume * ConfigManager.getExtra(`volume.${kind}`, 1),
+    ConfigManager.getExtra("sfx2d", false) ? 0.5 : 0.5 - x * 0.25,
+    kind === "hit" && ConfigManager.getExtra("hitPitch", false) ? min + Math.random() * (max - min) : 1,
+  );
 }
 
 function loadMusic(path: string, fresh: boolean): Music | null {

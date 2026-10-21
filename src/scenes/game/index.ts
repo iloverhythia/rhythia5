@@ -19,6 +19,10 @@ import {
   KEY_RIGHT_ALT,
   IsMouseButtonPressed,
   MOUSE_BUTTON_LEFT,
+  KEY_F1,
+  HideCursor,
+  ShowCursor,
+  GetFPS,
 } from "raylib";
 import { Scene } from "../../atoms/Scene";
 import { SoundSpaceMemoryMap } from "../../utils/storage/ssmm";
@@ -64,6 +68,7 @@ import { PaletteDrawer } from "../customization/molecules/PaletteDrawer";
 import type { CustomizationInventoryItem } from "../../utils/gameSettingsSchema";
 import { ReplayObserver } from "./ReplayObserver";
 import { ReplayPlayer } from "./ReplayPlayer";
+import { noteColorManager, type NoteColorPalette } from "../../utils/noteColorPalette";
 
 export class GameScene extends Scene {
   sceneName: string = "Game";
@@ -94,6 +99,8 @@ export class GameScene extends Scene {
   private replayObserver: ReplayObserver | null = null;
   private replayPlayer: ReplayPlayer | null = null;
   private replayEnded: boolean = false;
+  private replayUiHidden: boolean = ConfigManager.getExtra("hideReplayUi", false);
+  private paletteBeforeRandom: NoteColorPalette | null = null;
 
   private getDisplayDestRect(): {
     destX: number;
@@ -173,6 +180,11 @@ export class GameScene extends Scene {
     }
     this.exitCooldown = new Cooldown(0.4);
     this.shouldLockCursor = isStandalone && !this.replayPlayer;
+    if (this.shouldLockCursor && ConfigManager.getExtra("randomColorset", false)) {
+      const palettes = noteColorManager.getAllPalettes();
+      this.paletteBeforeRandom = noteColorManager.getCurrentPalette();
+      noteColorManager.setCurrentPalette(palettes[Math.floor(Math.random() * palettes.length)]);
+    }
     this.autoPlayEnabled = enableAutoPlay;
     if (this.autoPlayEnabled) {
       this.autoPlayController = new AutoPlayController(finalMapData ?? null);
@@ -213,6 +225,7 @@ export class GameScene extends Scene {
     } else {
       this.cursorLocked = false;
     }
+    if (this.replayPlayer && this.replayUiHidden) HideCursor();
 
     this.backInstructionObject = new GameObject({ zBase: 100 });
     this.backInstructionObject.onDraw = () => {};
@@ -228,6 +241,11 @@ export class GameScene extends Scene {
 
       if (IsKeyPressed(KEY_F3)) {
         this.gameLogic.toggleDebugMode();
+      }
+
+      if (this.replayPlayer && IsKeyPressed(KEY_F1)) {
+        this.replayUiHidden = !this.replayUiHidden;
+        (this.replayUiHidden ? HideCursor : ShowCursor)();
       }
 
       const gameState = this.gameLogic.getGameState();
@@ -333,6 +351,15 @@ export class GameScene extends Scene {
       this.gameLogic.update(settings);
     }
 
+    if (
+      (settings.restartOnDeath ?? 0) > 0 &&
+      !this.replayPlayer &&
+      this.gameLogic.getGameState().healthEnded &&
+      this.quickRestart.isIdle()
+    ) {
+      this.startQuickRestart();
+    }
+
     let rawMouseDelta: Vector2 | undefined;
     if (!this.autoPlayEnabled && this.cursorLocked) {
       rawMouseDelta = GetMouseDelta();
@@ -401,6 +428,14 @@ export class GameScene extends Scene {
       const screenY =
         destY + (this.lastCursorPos.y / Rhythia.gameHeight) * destHeight;
       mousePos = Vector2(screenX, screenY);
+    } else {
+      const { destX, destY, destWidth, destHeight } = this.getDisplayDestRect();
+      const os = GetMousePosition();
+      const scale = settings.absoluteScale ?? 1;
+      mousePos = Vector2(
+        destX + destWidth / 2 + (os.x - destX - destWidth / 2) * scale,
+        destY + destHeight / 2 + (os.y - destY - destHeight / 2) * scale,
+      );
     }
 
     const gameState = this.gameLogic.getGameState();
@@ -479,8 +514,24 @@ export class GameScene extends Scene {
 
     if ((settings.hudModeIndicator ?? 1) > 0) this.drawModeOverlay();
     toastManager.draw();
+    if (this.replayObserver && ConfigManager.getExtra("showStats", false)) {
+      const { speed, topSpeed, recInterval } = this.replayObserver;
+      const fps = GetFPS();
+      [
+        "cursor speed",
+        `${speed.toFixed(1)} m/sec/${fps}fr`,
+        "",
+        "top speed",
+        `${topSpeed.toFixed(1)} m/sec/${fps}fr`,
+        "",
+        "rec interval",
+        `${Math.round(recInterval)}`,
+      ].forEach((line, i) =>
+        drawText(line, Vector2(20, Rhythia.gameHeight / 2 - 90 + i * 22), 20, { r: 229, g: 242, b: 255, a: 220 }),
+      );
+    }
     this.pauseOverlay.draw();
-    if (this.replayPlayer) {
+    if (this.replayPlayer && !this.replayUiHidden) {
       this.drawReplayBadge();
     }
   }
@@ -581,6 +632,8 @@ export class GameScene extends Scene {
 
   destroy(): void {
     this.gameRenderer.cleanup();
+    if (this.replayPlayer) ShowCursor();
+    if (this.paletteBeforeRandom) noteColorManager.setCurrentPalette(this.paletteBeforeRandom);
 
     if (this.cursorLocked) {
       EnableCursor();
@@ -733,7 +786,7 @@ export class GameScene extends Scene {
     }
 
     if (!this.pauseOverlay.isActive) {
-      if (!this.quickRestart.isIdle()) {
+      if (!this.quickRestart.isIdle() || (this.getGameSettingsFromConfig().disablePausing ?? 0) > 0) {
         return false;
       }
       this.startPause();

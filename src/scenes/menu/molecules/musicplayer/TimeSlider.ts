@@ -11,12 +11,16 @@ import { SoundSpaceMemoryMap } from "../../../../utils/storage/ssmm";
 import { tintWithAccent } from "../../../../utils/colors";
 import { AccentColor } from "../../../../utils/imageBlur";
 import {
+  getCurrentMusicPath,
   isMusicPlaying,
   pause,
   play,
+  playMusic,
   seek,
 } from "../../../../utils/soundManager";
 import { logger } from "../../../../utils/logger";
+import { ConfigManager } from "../../../../utils/configManager";
+import { Maps } from "../../../../utils/maps";
 
 export class TimeSlider {
   
@@ -72,8 +76,10 @@ export class TimeSlider {
       mousePos.y >= p.y &&
       mousePos.y <= p.y + p.height
     ) {
+      const path = Maps.audioPath(String(this.currentMap.id), this.currentMap)!;
       if (isMusicPlaying()) pause();
-      else play();
+      else if (ConfigManager.getExtra("autoPreviewSong", true) || getCurrentMusicPath() === path) play();
+      else playMusic(path);
     }
 
     

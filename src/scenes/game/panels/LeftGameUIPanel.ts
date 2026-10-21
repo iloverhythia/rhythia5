@@ -7,8 +7,11 @@ import {
   rlRotatef,
   rlScalef,
   DrawRing,
+  GetFrameTime,
 } from "raylib";
 import { drawText } from "../../../utils/text";
+import { drawSprite } from "../../../utils/sprite";
+import { lerp } from "../../../utils/lerp";
 import { Rhythia } from "../../../atoms/Rhythia";
 import { GameUIPanel, GameUIPanelCommonArgs } from "./GameUIPanel";
 
@@ -22,15 +25,18 @@ export interface LeftPanelArgs extends GameUIPanelCommonArgs {
   combo: number;
   hits: number;
   misses: number;
+  pauses: number;
   comboScaleAnimation: number;
 }
 
 export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
+  private lastMisses = 0;
+  private missFlash = 0;
+
   public render(args: LeftPanelArgs): void {
     rlPushMatrix();
 
     const uiOpacity = args.settings?.uiOpacity ?? 0.15;
-    const uiTiltRate = args.settings?.uiTiltRate ?? 1.0;
     const playfieldScale = args.settings?.playfieldScale ?? 1.0;
     const uiScale = args.settings?.uiScale ?? 1.0;
 
@@ -52,12 +58,7 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
     const depth = args.closeDistance;
     rlTranslatef(planeX, planeY, depth);
     
-    const tiltCompensation = 1 - uiTiltRate;
-    rlTranslatef(
-      args.cameraTiltX * 100 * tiltCompensation,
-      args.cameraTiltY * 100 * tiltCompensation,
-      0
-    );
+    this.applyTilt(args);
     rlRotatef(-10, 0, 1, 0);
     
     rlScalef(uiScale, uiScale, 1.0);
@@ -67,6 +68,7 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
 
     const startY = -100;
     const textOpacity = Math.round(255 * (uiOpacity * 5));
+    const simple = (args.settings?.simpleHud ?? 0) > 0;
 
     const comboInfo = this.getComboLevel(args.combo);
     const comboColor = { ...comboInfo.color, a: textOpacity };
@@ -74,7 +76,7 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
     const arcCenterX = 0;
     const arcCenterY = startY + 40;
 
-    if ((args.settings?.hudCombo ?? 1) > 0) {
+    if (!simple && (args.settings?.hudCombo ?? 1) > 0) {
       rlPushMatrix();
       rlTranslatef(arcCenterX, arcCenterY, 0);
       rlScalef(args.comboScaleAnimation, args.comboScaleAnimation, 1.0);
@@ -85,7 +87,7 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
         `COMBO`,
         Vector2(0, -70),
         18,
-        { r: 180, g: 180, b: 180, a: textOpacity },
+        this.color("panelText", textOpacity * 0.7),
         "center"
       );
 
@@ -98,29 +100,56 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
     const accuracy = total > 0 ? (args.hits / total) * 100 : 100;
     const accuracyY = arcCenterY + 120;
 
-    if ((args.settings?.hudAccuracy ?? 1) > 0) {
+    if (!simple && (args.settings?.hudAccuracy ?? 1) > 0) {
       drawText(
         `ACCURACY`,
         Vector2(0, accuracyY),
         18,
-        { r: 180, g: 180, b: 180, a: textOpacity },
+        this.color("panelText", textOpacity * 0.7),
         "center"
       );
       drawText(
         `${accuracy.toFixed(2)}%`,
         Vector2(0, accuracyY + 20),
         32,
-        { r: 255, g: 255, b: 255, a: textOpacity },
+        this.color("panelText", textOpacity),
         "center"
       );
     }
 
+    if (!simple && (args.settings?.hudAccuracyBar ?? 1) > 0) {
+      drawSprite("/solid.png", Vector2(-60, accuracyY + 58), Vector2(120, 5), this.color("accEmptyColor", textOpacity));
+      drawSprite("/solid.png", Vector2(-60, accuracyY + 58), Vector2((120 * accuracy) / 100, 5), this.color("accFillColor", textOpacity));
+    }
+
+    if (args.misses > this.lastMisses) this.missFlash = 1;
+    this.lastMisses = args.misses;
+    this.missFlash = Math.max(0, this.missFlash - GetFrameTime() * 3);
+    const statsY = simple ? -20 : accuracyY + 72;
+    const missColor = this.color("missTextColor", textOpacity);
+    const flashColor = this.color("missFlashColor", textOpacity);
+
     if ((args.settings?.hudMisses ?? 1) > 0) {
       drawText(
         `MISSES: ${args.misses}`,
-        Vector2(0, accuracyY + 65),
+        Vector2(0, statsY),
         20,
-        { r: 200, g: 100, b: 100, a: textOpacity },
+        {
+          r: lerp(missColor.r, flashColor.r, this.missFlash),
+          g: lerp(missColor.g, flashColor.g, this.missFlash),
+          b: lerp(missColor.b, flashColor.b, this.missFlash),
+          a: lerp(missColor.a, flashColor.a, this.missFlash),
+        },
+        "center"
+      );
+    }
+
+    if ((args.settings?.hudPauses ?? 1) > 0) {
+      drawText(
+        `PAUSES: ${args.pauses}`,
+        Vector2(0, statsY + 25),
+        20,
+        this.color(args.pauses > 0 ? "pauseUsedColor" : "pauseTextColor", textOpacity),
         "center"
       );
     }
@@ -186,18 +215,7 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
         0,
         360,
         36,
-        { r: 40, g: 40, b: 40, a: Math.round(textOpacity * 0.3) }
-      );
-
-      const arcColor = { ...comboInfo.color, a: Math.round(textOpacity * 0.9) };
-      DrawRing(
-        Vector2(centerX, centerY),
-        innerRadius,
-        outerRadius,
-        0,
-        360,
-        36,
-        arcColor
+        this.color("comboFillColor", textOpacity)
       );
       return;
     }
@@ -212,15 +230,9 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
     const startAngle = -90;
     const endAngle = startAngle + progressAngle;
 
-    DrawRing(Vector2(centerX, centerY), innerRadius, outerRadius, 0, 360, 36, {
-      r: 40,
-      g: 40,
-      b: 40,
-      a: Math.round(textOpacity * 0.3),
-    });
+    DrawRing(Vector2(centerX, centerY), innerRadius, outerRadius, 0, 360, 36, this.color("comboEmptyColor", textOpacity));
 
     if (progressAngle > 0) {
-      const arcColor = { ...comboInfo.color, a: Math.round(textOpacity * 0.9) };
       DrawRing(
         Vector2(centerX, centerY),
         innerRadius,
@@ -228,7 +240,7 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
         startAngle,
         endAngle,
         36,
-        arcColor
+        this.color("comboFillColor", textOpacity)
       );
     }
   }
