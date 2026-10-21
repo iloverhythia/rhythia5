@@ -61,6 +61,7 @@ export class Maps {
           starRating: m.starRating,
           image: m.onlineImage,
           beatmapFile: null,
+          created_at: fs.statSync(`${dir}/${f}`).mtime.toISOString(),
         });
       } catch {}
     }

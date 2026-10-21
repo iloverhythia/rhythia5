@@ -1,14 +1,13 @@
 import { Vector2 } from "raylib";
+import { getUserScores, getProfile } from "rhythia-api";
+import { PANEL } from "../atoms/BaseDrawer";
+import { PanelDrawer, Hit, drawCard, drawTabs } from "../atoms/PanelDrawer";
 import { drawSprite } from "../../../utils/sprite";
 import { drawText, measureText } from "../../../utils/text";
-import { tintWithAccent } from "../../../utils/colors";
-import { BaseDrawer } from "../atoms/BaseDrawer";
-import { getUserScores, getProfile } from "rhythia-api";
+import { drawRect } from "../../../ui/draw";
 import { ProfileManager } from "../../../utils/profileManager";
-import { GameObject } from "../../../atoms/Object";
-import { playFx } from "../../../utils/soundManager";
 import { logger } from "../../../utils/logger";
-import { lerpDelta } from "../../../utils/lerp";
+import type { Rect } from "../../settings/pages";
 
 interface ProfileData {
   id?: number;
@@ -58,61 +57,18 @@ interface UserScoresData {
   };
 }
 
-interface TabButton {
-  gameObject: GameObject;
-  key: "top" | "reign" | "lastDay";
-  label: string;
-}
-
-export class ProfileDrawer extends BaseDrawer {
+export class ProfileDrawer extends PanelDrawer {
   private profileData: ProfileData | null = null;
   private userScores: UserScoresData | null = null;
   private loadingScores: boolean = false;
   private loadingProfile: boolean = false;
   private selectedScoreTab: "top" | "reign" | "lastDay" = "top";
-  private tabButtons: TabButton[] = [];
-  private scoreHoverProgress: Map<number, number> = new Map();
 
   constructor(profileData: ProfileData | null = null) {
-    super(1000); 
+    super();
     this.profileData = profileData;
   }
 
-  protected onInitialize(): void {}
-
-  private createTabButtons(tabs: any[], baseX: number, baseY: number): void {
-    tabs.forEach((tab, index) => {
-      const tabX = baseX + index * 120; 
-      const tabWidth = 110; 
-      const tabHeight = 40; 
-
-      const gameObject = new GameObject({ zBase: 16 });
-      gameObject.attachRect({
-        pos: { x: tabX, y: baseY },
-        size: { x: tabWidth, y: tabHeight },
-      });
-
-      const button: TabButton = {
-        gameObject,
-        key: tab.key,
-        label: tab.label,
-      };
-
-      gameObject.rectArea!.onClick = () => {
-        playFx("/click.wav", 0.3);
-        this.selectedScoreTab = button.key;
-        return true; 
-      };
-
-      gameObject.rectArea!.onHoverStart = () => {
-        playFx("/click.wav", 0.1);
-      };
-
-      this.tabButtons.push(button);
-    });
-  }
-
-  
   private fitTextToWidth(
     text: string,
     fontSize: number,
@@ -144,418 +100,140 @@ export class ProfileDrawer extends BaseDrawer {
     return fitted + ellipsis;
   }
 
-  private updateTabButtonPositions(baseX: number, baseY: number): void {
-    this.tabButtons.forEach((button, index) => {
-      if (button.gameObject.rectArea) {
-        button.gameObject.rectArea.pos.x = baseX + index * 120; 
-        button.gameObject.rectArea.pos.y = baseY;
-      }
-    });
-  }
-
   protected getHeaderText(): string {
     return "Profile";
   }
 
-  protected drawContent(): void {
-    if (this.loadingProfile) {
-      drawText(
-        "Loading profile...",
-        Vector2(40, 150),
-        32,
-        { r: 180, g: 180, b: 180, a: 255 },
-        "left"
-      );
-      return;
-    }
-
-    if (!this.profileData) {
-      drawText(
-        "No profile data",
-        Vector2(40, 150),
-        32,
-        { r: 180, g: 180, b: 180, a: 255 },
-        "left"
-      );
-      return;
-    }
-
-    const contentStartY = 120;
-    const leftMargin = 40;
-    const avatarSize = 120; 
-
-    const avatarY = contentStartY;
-
-    const borderWidth = 3;
-    const avatarBorder = tintWithAccent(
-      { r: 120, g: 120, b: 140 },
-      this.accentColor,
-      0.4
-    );
-
-    drawSprite(
-      "/solid.png",
-      Vector2(leftMargin - borderWidth, avatarY - borderWidth),
-      Vector2(avatarSize + borderWidth * 2, avatarSize + borderWidth * 2),
-      avatarBorder
-    );
-
-    const avatarUrl =
-      this.profileData?.avatar_url || this.profileData?.profile_image;
-    if (avatarUrl && avatarUrl.length > 0) {
-      drawSprite(
-        avatarUrl,
-        Vector2(leftMargin, avatarY),
-        Vector2(avatarSize, avatarSize),
-        { r: 255, g: 255, b: 255, a: 255 }
-      );
-    } else {
-      drawSprite(
-        "/solid.png",
-        Vector2(leftMargin, avatarY),
-        Vector2(avatarSize, avatarSize),
-        { r: 60, g: 60, b: 80, a: 255 }
-      );
-
-      drawSprite(
-        "/solid.png",
-        Vector2(leftMargin + avatarSize / 4, avatarY + avatarSize / 4),
-        Vector2(avatarSize / 2, avatarSize / 2),
-        { r: 180, g: 180, b: 200, a: 255 }
-      );
-    }
-
-    const textX = leftMargin + avatarSize + 25;
-    const username = this.profileData?.username || "Unknown User";
-    drawText(
-      username,
-      Vector2(textX, avatarY + 10),
-      48,
-      { r: 255, g: 255, b: 255, a: 255 },
-      "left"
-    );
-
-    const position = this.profileData?.position;
-    if (position) {
-      const rankText = `#${position.toLocaleString()}`;
-      drawText(
-        rankText,
-        Vector2(textX, avatarY + 65),
-        36,
-        { r: 220, g: 220, b: 220, a: 255 },
-        "left"
-      );
-    }
-
-    const statsY = avatarY + avatarSize + 40;
-
-    const skillPoints = this.profileData?.skill_points || 0;
-    const formattedSP = skillPoints.toLocaleString();
-    drawText(
-      "Skill Points",
-      Vector2(leftMargin, statsY),
-      28,
-      { r: 180, g: 180, b: 180, a: 255 },
-      "left"
-    );
-    drawText(
-      formattedSP,
-      Vector2(leftMargin, statsY + 35),
-      36,
-      { r: 255, g: 255, b: 255, a: 255 },
-      "left"
-    );
-
-    const playCount = this.profileData?.play_count || 0;
-    drawText(
-      "Play Count",
-      Vector2(leftMargin + 200, statsY),
-      28,
-      { r: 180, g: 180, b: 180, a: 255 },
-      "left"
-    );
-    drawText(
-      playCount.toLocaleString(),
-      Vector2(leftMargin + 200, statsY + 35),
-      36,
-      { r: 255, g: 255, b: 255, a: 255 },
-      "left"
-    );
-
-    const totalScore = this.profileData?.total_score || 0;
-    drawText(
-      "Total Score",
-      Vector2(leftMargin, statsY + 100),
-      28,
-      { r: 180, g: 180, b: 180, a: 255 },
-      "left"
-    );
-    drawText(
-      totalScore.toLocaleString(),
-      Vector2(leftMargin, statsY + 135),
-      36,
-      { r: 255, g: 255, b: 255, a: 255 },
-      "left"
-    );
-
-    const squaresHit = this.profileData?.squares_hit || 0;
-    drawText(
-      "Squares Hit",
-      Vector2(leftMargin + 200, statsY + 100),
-      28,
-      { r: 180, g: 180, b: 180, a: 255 },
-      "left"
-    );
-    drawText(
-      squaresHit.toLocaleString(),
-      Vector2(leftMargin + 200, statsY + 135),
-      36,
-      { r: 255, g: 255, b: 255, a: 255 },
-      "left"
-    );
-
-    if (this.profileData?.badges && this.profileData.badges.length > 0) {
-      const badgesY = statsY + 200;
-      drawText(
-        "Badges",
-        Vector2(leftMargin, badgesY),
-        32,
-        { r: 200, g: 200, b: 200, a: 255 },
-        "left"
-      );
-
-      this.drawBadges(
-        this.profileData.badges,
-        leftMargin,
-        badgesY + 40,
-        400 
-      );
-    }
-
-    this.drawScores();
+  protected getSubtitleText(): string {
+    return this.loadingProfile ? "Loading..." : this.profileData?.username || "";
   }
 
-  private drawScores(): void {
-    const scoresX = 500; 
-    const scoresY = 120;
-    const xOffset =
-      -this.drawerWidth + this.drawerWidth * this.animationProgress;
+  protected drawBody(column: Rect, mouse: Vector2 | null, hits: Hit[]): number {
+    let y = column.y;
+    const profile = this.profileData;
+    if (this.loadingProfile || !profile) {
+      drawText(this.loadingProfile ? "Loading profile..." : "No profile data", Vector2(column.x, y), 24, PANEL.dim);
+      return y + 30;
+    }
 
-    drawSprite(
-      "/solid.png",
-      Vector2(xOffset + scoresX - 30, scoresY),
-      Vector2(3, 500),
-      {
-        r: 60,
-        g: 60,
-        b: 60,
-        a: 100 * this.animationProgress,
-      }
-    );
-
-    drawText(
-      "Recent Scores",
-      Vector2(xOffset + scoresX, scoresY),
-      42,
-      { r: 220, g: 220, b: 220, a: 255 * this.animationProgress },
-      "left"
-    );
-
-    const tabY = scoresY + 50;
-    const tabs = [
-      { key: "top" as const, label: "Top" },
-      { key: "reign" as const, label: "Reign" },
-      { key: "lastDay" as const, label: "24h" },
-    ];
-
-    if (this.tabButtons.length === 0) {
-      this.createTabButtons(tabs, xOffset + scoresX, tabY);
+    const card = { x: column.x, y, w: column.w, h: 150 };
+    drawCard(card);
+    const avatarUrl = profile.avatar_url || profile.profile_image;
+    if (avatarUrl) {
+      drawSprite(avatarUrl, Vector2(card.x + 20, y + 20), Vector2(110, 110), PANEL.text);
     } else {
-      this.updateTabButtonPositions(xOffset + scoresX, tabY);
+      drawRect(card.x + 20, y + 20, 110, 110, { r: 50, g: 50, b: 54, a: 255 });
     }
+    drawSprite("/avatar-mask.png", Vector2(card.x + 20, y + 20), Vector2(110, 110), PANEL.card);
+    const name = this.fitTextToWidth(profile.username || "Unknown User", 36, card.w - 200);
+    drawText(name, Vector2(card.x + 150, y + 32), 36, PANEL.text);
+    drawSprite("/square.png", Vector2(card.x + 158 + measureText(name, 36).width, y + 36), Vector2(28, 28), PANEL.text);
+    const details = [
+      profile.position ? `#${profile.position.toLocaleString()}` : "",
+      profile.flag || "",
+      profile.is_online ? "Online" : "",
+    ].filter(Boolean);
+    drawText(details.join("  -  "), Vector2(card.x + 150, y + 80), 22, PANEL.dim);
+    y += card.h + 10;
 
-    tabs.forEach((tab, index) => {
-      const tabX = xOffset + scoresX + index * 120; 
-      const tabWidth = 110; 
-      const tabHeight = 40; 
-      const isActive = this.selectedScoreTab === tab.key;
-
-      if (isActive) {
-        drawSprite(
-          "/solid.png",
-          Vector2(tabX, tabY),
-          Vector2(tabWidth, tabHeight),
-          { r: 80, g: 80, b: 100, a: 180 * this.animationProgress }
-        );
-      }
-
-      drawText(
-        tab.label,
-        Vector2(tabX + tabWidth / 2, tabY + 10),
-        28,
-        isActive
-          ? { r: 255, g: 255, b: 255, a: 255 * this.animationProgress }
-          : { r: 150, g: 150, b: 150, a: 255 * this.animationProgress },
-        "center"
-      );
+    const stats = [
+      ["Skill Points", Math.round(profile.skill_points || 0)],
+      ["Play Count", profile.play_count || 0],
+      ["Total Score", profile.total_score || 0],
+      ["Squares Hit", profile.squares_hit || 0],
+    ] as const;
+    const statW = (column.w - 30) / 4;
+    stats.forEach(([label, value], index) => {
+      const stat = { x: column.x + index * (statW + 10), y, w: statW, h: 74 };
+      drawCard(stat);
+      drawText(label, Vector2(stat.x + 14, y + 12), 17, PANEL.dim);
+      drawText(this.fitTextToWidth(value.toLocaleString(), 24, statW - 28), Vector2(stat.x + 14, y + 38), 24, PANEL.text);
     });
+    y += 84;
 
-    const scoresListY = tabY + 60;
-
-    if (this.loadingScores) {
-      drawText(
-        "Loading scores...",
-        Vector2(xOffset + scoresX, scoresListY),
-        24,
-        { r: 150, g: 150, b: 150, a: 255 * this.animationProgress },
-        "left"
-      );
-      return;
+    const badges: string[] = profile.badges || [];
+    if (badges.length > 0) {
+      let x = column.x + 14;
+      let row = 0;
+      const chips = badges.map((badge) => {
+        const config = this.getBadgeConfig(badge);
+        const w = measureText(config.text, 18).width + 24;
+        if (x + w > column.x + column.w - 14) {
+          x = column.x + 14;
+          row++;
+        }
+        const chip = { x, y: y + 14 + row * 42, w, config };
+        x += w + 10;
+        return chip;
+      });
+      const badgeCard = { x: column.x, y, w: column.w, h: 28 + (row + 1) * 42 - 10 };
+      drawCard(badgeCard);
+      chips.forEach((chip) => {
+        drawRect(chip.x, chip.y, chip.w, 32, { r: 34, g: 34, b: 37, a: 255 });
+        drawText(chip.config.text, Vector2(chip.x + 12, chip.y + 6), 18, { ...chip.config.color, a: 255 });
+      });
+      y += badgeCard.h + 10;
     }
 
-    if (!this.userScores) {
-      drawText(
-        "No scores available",
-        Vector2(xOffset + scoresX, scoresListY),
-        24,
-        { r: 150, g: 150, b: 150, a: 255 * this.animationProgress },
-        "left"
-      );
-      return;
+    drawTabs(
+      { x: column.x, y, w: column.w, h: 42 },
+      [
+        { id: "top", label: "Top" },
+        { id: "reign", label: "Reign" },
+        { id: "lastDay", label: "24h" },
+      ],
+      this.selectedScoreTab,
+      mouse,
+      hits,
+      (id) => (this.selectedScoreTab = id as "top" | "reign" | "lastDay")
+    );
+    y += 54;
+
+    const scores = this.userScores?.[this.selectedScoreTab] || [];
+    if (this.loadingScores || scores.length === 0) {
+      const message = this.loadingScores
+        ? "Loading scores..."
+        : this.userScores
+          ? "No scores in this category"
+          : "No scores available";
+      drawText(message, Vector2(column.x + column.w / 2, y + 10), 20, PANEL.dim, "center");
+      return y + 40;
     }
 
-    const scores = this.userScores[this.selectedScoreTab] || [];
+    scores.forEach((score, index) => {
+      const row = { x: column.x, y, w: column.w, h: 78 };
+      y += 88;
+      if (!this.isVisible(row)) return;
+      drawRect(row.x, row.y, row.w, row.h, PANEL.card);
+      const rank = `#${index + 1}`;
+      drawText(rank, Vector2(row.x + 12, row.y + 25), 26, PANEL.text);
+      const dividerX = row.x + 24 + measureText(rank, 26).width;
+      drawRect(dividerX, row.y + 10, 2, row.h - 20, PANEL.border);
 
-    if (scores.length === 0) {
-      drawText(
-        "No scores in this category",
-        Vector2(xOffset + scoresX, scoresListY),
+      const textX = dividerX + 14;
+      const right = row.x + row.w - 14;
+      const sp = score.awarded_sp ? `+${score.awarded_sp} RP` : "";
+      const title = this.fitTextToWidth(
+        score.beatmapTitle || "Unknown Map",
         24,
-        { r: 150, g: 150, b: 150, a: 255 * this.animationProgress },
-        "left"
+        right - textX - (sp ? measureText(sp, 22).width + 16 : 0)
       );
-      return;
-    }
-
-    scores.slice(0, 8).forEach((score, index) => {
-      const scoreHeight = 90; 
-      const scoreWidth = 450; 
-      const scoreY = scoresListY + index * scoreHeight;
-
-      if (index % 2 === 0) {
-        drawSprite(
-          "/solid.png",
-          Vector2(xOffset + scoresX, scoreY),
-          Vector2(scoreWidth, scoreHeight - 8),
-          {
-            r: 60,
-            g: 60,
-            b: 70,
-            a: 120 * this.animationProgress,
-          }
-        );
-      }
-
-      drawText(
-        `#${index + 1}`,
-        Vector2(xOffset + scoresX + 20, scoreY + 18),
-        32,
-        { r: 150, g: 150, b: 150, a: 255 * this.animationProgress },
-        "left"
-      );
-
-      const title = score.beatmapTitle || "Unknown Map";
-      const titleX = xOffset + scoresX + 75;
-      const titleY = scoreY + 12;
-      const titleFont = 28;
-      const rightEdge = xOffset + scoresX + scoreWidth - 20;
-
-      
-      let reservedRight = 0;
-      if (score.awarded_sp) {
-        const spLabel = `+${score.awarded_sp} SP`;
-        const spSize = measureText(spLabel, 26, 1);
-        reservedRight = spSize.width + 16;
-      }
-      const maxTitleWidth = Math.max(0, rightEdge - reservedRight - titleX);
-      const fittedTitle = this.fitTextToWidth(title, titleFont, maxTitleWidth);
-
-      drawText(
-        fittedTitle,
-        Vector2(titleX, titleY),
-        titleFont,
-        { r: 220, g: 220, b: 220, a: 255 * this.animationProgress },
-        "left"
-      );
-
-      const detailsY = scoreY + 50;
-      const fontSize = 24;
-      let cursorX = xOffset + scoresX + 75;
-      const gap = 8;
-
-      const neutral = (a: number) => ({ r: 200, g: 200, b: 200, a });
-      const redMatte = (a: number) => ({ r: 190, g: 80, b: 80, a });
-      const greenMatte = (a: number) => ({ r: 90, g: 180, b: 110, a });
-      const blueMatte = (a: number) => ({ r: 110, g: 160, b: 220, a });
-
-      const drawSeg = (
-        text: string,
-        color: { r: number; g: number; b: number; a: number }
-      ) => {
-        if (!text) return;
-        drawText(text, Vector2(cursorX, detailsY), fontSize, color, "left");
-        const size = measureText(text, fontSize, 1);
-        cursorX += size.width + gap;
-      };
-
-      
-      if (score.spin) {
-        drawSeg("SPIN", neutral(255 * this.animationProgress));
-      }
+      drawText(title, Vector2(textX, row.y + 10), 24, PANEL.text);
+      if (sp) drawText(sp, Vector2(right, row.y + 12), 22, { r: 100, g: 200, b: 100, a: 255 }, "right");
 
       const misses = Math.max(0, score.misses ?? 0);
-      const totalNotes = score.beatmapNotes ?? null;
-      const hits = totalNotes != null ? Math.max(0, totalNotes - misses) : null;
-      const accNumber =
-        totalNotes && totalNotes > 0 && hits != null
-          ? ((hits / totalNotes) * 100).toFixed(1)
-          : "";
-
-      drawSeg(String(misses), neutral(255 * this.animationProgress));
-      drawSeg("X", redMatte(255 * this.animationProgress));
-      if (hits !== null) {
-        drawSeg(String(hits), neutral(255 * this.animationProgress));
-        drawSeg("O", greenMatte(255 * this.animationProgress));
-      }
-      if (accNumber) {
-        drawSeg(accNumber, neutral(255 * this.animationProgress));
-        drawSeg("%", blueMatte(255 * this.animationProgress));
-      }
-
-      const rightX = xOffset + scoresX + scoreWidth - 20;
-      const spY = scoreY + 18;
-      if (score.awarded_sp) {
-        drawText(
-          `+${score.awarded_sp} SP`,
-          Vector2(rightX, spY),
-          26,
-          { r: 100, g: 200, b: 100, a: 255 * this.animationProgress },
-          "right"
-        );
-      }
+      const notes = score.beatmapNotes ?? null;
+      const accuracy = notes ? ` - ${(((notes - misses) / notes) * 100).toFixed(1)}%` : "";
+      const segments = [
+        score.spin ? "Spin" : "",
+        `${misses} misses${notes != null ? ` - ${Math.max(0, notes - misses)} hits` : ""}${accuracy}`,
+      ].filter(Boolean);
+      drawText(segments.join("  -  "), Vector2(textX, row.y + 44), 17, PANEL.dim);
       if (score.speed && score.speed !== 1) {
-        const speedVal = typeof score.speed === "number" ? score.speed : 1;
-        const speedRoundedUp = Math.ceil(speedVal * 100) / 100;
-        const speedLabel = `${speedRoundedUp.toFixed(2)}x`;
-        drawText(
-          speedLabel,
-          Vector2(rightX, detailsY),
-          22,
-          { r: 200, g: 200, b: 200, a: 220 * this.animationProgress },
-          "right"
-        );
+        drawText(`${(Math.ceil(score.speed * 100) / 100).toFixed(2)}x`, Vector2(right, row.y + 46), 17, PANEL.dim, "right");
       }
     });
+    return y - 10;
   }
 
   private getBadgeConfig(badgeName: string): {
@@ -594,61 +272,9 @@ export class ProfileDrawer extends BaseDrawer {
     );
   }
 
-  private drawBadges(
-    badges: string[],
-    x: number,
-    y: number,
-    maxWidth: number
-  ): void {
-    const badgeHeight = 35;
-    const badgeSpacing = 12;
-    const rowSpacing = 15;
-
-    let currentX = x;
-    let currentY = y;
-
-    for (const badgeName of badges) {
-      const config = this.getBadgeConfig(badgeName);
-      const badgeWidth = Math.max(config.text.length * 12 + 20, 80); 
-
-      if (currentX + badgeWidth > x + maxWidth && currentX > x) {
-        currentX = x;
-        currentY += badgeHeight + rowSpacing;
-      }
-
-      const badgeBg = tintWithAccent(
-        { r: 38, g: 38, b: 38 },
-        this.accentColor,
-        0.3
-      );
-
-      drawSprite(
-        "/solid.png",
-        Vector2(currentX, currentY),
-        Vector2(badgeWidth, badgeHeight),
-        badgeBg
-      );
-
-      drawText(
-        config.text,
-        Vector2(currentX + badgeWidth / 2, currentY + badgeHeight / 2 - 12),
-        22,
-        {
-          r: config.color.r,
-          g: config.color.g,
-          b: config.color.b,
-          a: 255,
-        },
-        "center"
-      );
-
-      currentX += badgeWidth + badgeSpacing;
-    }
-  }
-
   public async setProfileData(profileData: ProfileData | null): Promise<void> {
-    console.log(this.profileData);
     this.profileData = profileData;
+    this.resetScrollState();
 
     if (profileData?.id !== undefined) {
       await this.loadUserScores(profileData.id);
@@ -658,6 +284,7 @@ export class ProfileDrawer extends BaseDrawer {
   public async loadProfileById(userId: number): Promise<void> {
     try {
       this.loadingProfile = true;
+      this.resetScrollState();
       const token = ProfileManager.get().token;
 
       logger(`🌐 Making getProfile API request for user ID: ${userId}`);
@@ -712,12 +339,6 @@ export class ProfileDrawer extends BaseDrawer {
     return this.profileData;
   }
 
-  public destroy(): void {
-    this.tabButtons.forEach((button) => {
-      button.gameObject.destroy();
-    });
-    this.tabButtons = [];
-  }
 }
 
 export function createProfileDrawer(
