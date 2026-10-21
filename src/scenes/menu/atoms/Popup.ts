@@ -134,6 +134,7 @@ export class Popup extends OverlayBase {
     confirmText?: string;
     cancelText?: string;
     maxLength?: number;
+    masked?: boolean;
     onConfirm: (value: string) => void;
     onCancel?: () => void;
   }): void {
@@ -158,6 +159,7 @@ export class Popup extends OverlayBase {
       placeholder: this.promptPlaceholder,
       initialValue: this.promptInitialValue,
       maxLength: opts.maxLength ?? 64,
+      masked: opts.masked,
       fontSize: 22,
       onEnter: (value: string) => {
         try {

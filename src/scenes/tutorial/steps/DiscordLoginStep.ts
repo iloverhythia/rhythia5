@@ -18,7 +18,7 @@ import { drawText } from "../../../utils/text";
 import { drawSprite } from "../../../utils/sprite";
 import { Rhythia } from "../../../atoms/Rhythia";
 import { lerpDelta } from "../../../utils/lerp";
-import { loginWithDiscord } from "../../../utils/auth/supabase";
+import { promptPasswordLogin } from "../../../utils/auth/supabase";
 
 interface DiscordButton {
   x: number;
@@ -69,7 +69,7 @@ export class DiscordLoginStep extends BaseTutorialStep {
   constructor() {
     super({
       id: "discordLogin",
-      text: "Finally, connect your Discord account for a personalized experience! We respect your privacy - no profile details will be made public.",
+      text: "Finally, log in to your Rhythia account for a personalized experience! No account yet? Sign up at rhythia.com.",
       mascotEmote: "happy",
       waitForUser: false,
     });
@@ -389,7 +389,7 @@ export class DiscordLoginStep extends BaseTutorialStep {
     );
 
     drawText(
-      "D",
+      "R",
       Vector2(logoX + logoSize / 2, logoY + logoSize / 2 - 15),
       30, 
       discordColor,
@@ -400,7 +400,7 @@ export class DiscordLoginStep extends BaseTutorialStep {
       ? "Connecting..."
       : this.loginComplete
       ? "Connected"
-      : "Login with Discord";
+      : "Log in";
     const textColor: Color = { r: 255, g: 255, b: 255, a: 255 };
 
     drawText(
@@ -431,7 +431,7 @@ export class DiscordLoginStep extends BaseTutorialStep {
     const infoY = this.button.y + this.button.height + 30;
 
     drawText(
-      "Your Discord profile remains private",
+      "Use your Rhythia username or email and password",
       Vector2(this.button.x + this.button.width / 2, infoY),
       22, 
       { r: 180, g: 180, b: 180, a: 255 },
@@ -807,7 +807,7 @@ export class DiscordLoginStep extends BaseTutorialStep {
         this.markCompleted();
       } catch (error) {
         console.error("Discord login failed", error);
-        this.loginError = "Discord login failed";
+        this.loginError = "Login failed, try again";
         this.loginClicked = false;
       } finally {
         this.isLoggingIn = false;
@@ -858,9 +858,7 @@ export class DiscordLoginStep extends BaseTutorialStep {
 }
 
 async function supabaseLogin(): Promise<void> {
-  const user = await loginWithDiscord();
-
-  if (!user) {
-    throw new Error("Discord login did not return a user");
+  if (!(await promptPasswordLogin())) {
+    throw new Error("Login cancelled or failed");
   }
 }

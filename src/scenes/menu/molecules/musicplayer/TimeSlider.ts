@@ -10,7 +10,12 @@ import { drawText } from "../../../../utils/text";
 import { SoundSpaceMemoryMap } from "../../../../utils/storage/ssmm";
 import { tintWithAccent } from "../../../../utils/colors";
 import { AccentColor } from "../../../../utils/imageBlur";
-import { seek } from "../../../../utils/soundManager";
+import {
+  isMusicPlaying,
+  pause,
+  play,
+  seek,
+} from "../../../../utils/soundManager";
 import { logger } from "../../../../utils/logger";
 
 export class TimeSlider {
@@ -35,6 +40,7 @@ export class TimeSlider {
     width: number;
     height: number;
   } = { x: 0, y: 0, width: 0, height: 0 };
+  private pauseBounds = { x: 0, y: 0, width: 0, height: 0 };
 
   public setCurrentMap(map: SoundSpaceMemoryMap | null): void {
     if (map !== this.currentMap) {
@@ -57,6 +63,18 @@ export class TimeSlider {
     if (!mousePos || !this.currentMap) return;
 
     this.sliderHovered = this.isPointInSlider(mousePos);
+
+    const p = this.pauseBounds;
+    if (
+      IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+      mousePos.x >= p.x &&
+      mousePos.x <= p.x + p.width &&
+      mousePos.y >= p.y &&
+      mousePos.y <= p.y + p.height
+    ) {
+      if (isMusicPlaying()) pause();
+      else play();
+    }
 
     
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -86,72 +104,81 @@ export class TimeSlider {
   public draw(centerX: number, y: number): void {
     if (!this.currentMap) return;
 
-    const sliderWidth = 300;
+    const sliderWidth = 250;
     const sliderHeight = 6;
     const knobSize = 20;
-    const labelWidth = 100;
-    const timeWidth = 80;
-    const totalWidth = labelWidth + sliderWidth + timeWidth + 40;
+    const iconSize = 26;
+    const timeWidth = 56;
+    const totalWidth = iconSize + timeWidth + sliderWidth + timeWidth + 36;
+    const alpha = this.fadeProgress * 255;
+    const textColor = { r: 230, g: 230, b: 230, a: alpha };
+    const format = (ms: number) =>
+      [Math.floor(ms / 60000), Math.floor((ms % 60000) / 1000)]
+        .map((n) => String(n).padStart(2, "0"))
+        .join(":");
 
     const startX = centerX - totalWidth / 2;
-    const sliderX = startX + labelWidth + 20;
-    const sliderY = y;
+    this.pauseBounds = {
+      x: startX,
+      y: y - iconSize / 2,
+      width: iconSize,
+      height: iconSize,
+    };
+    drawSprite(
+      isMusicPlaying() ? "/icons/player-pause.png" : "/icons/player-play.png",
+      Vector2(startX, y - iconSize / 2),
+      Vector2(iconSize, iconSize),
+      textColor
+    );
 
+    const durationMs = this.currentMap.duration || 0;
     drawText(
-      "Start from",
-      Vector2(startX, sliderY - 13),
-      24,
-      { r: 180, g: 180, b: 180, a: this.fadeProgress * 255 },
+      format(durationMs * this.sliderValue),
+      Vector2(startX + iconSize + 12, y - 10),
+      20,
+      textColor,
       "left"
     );
 
+    const sliderX = startX + iconSize + timeWidth + 18;
+    const sliderY = y;
     drawSprite(
       "/solid.png",
       Vector2(sliderX, sliderY - sliderHeight / 2),
       Vector2(sliderWidth, sliderHeight),
-      { r: 60, g: 60, b: 60, a: this.fadeProgress * 255 }
+      { r: 60, g: 60, b: 60, a: alpha }
     );
 
     const filledWidth = sliderWidth * this.sliderValue;
     if (filledWidth > 0) {
       const fillColor = tintWithAccent(
-        { r: 100, g: 200, b: 255 },
+        { r: 220, g: 220, b: 220 },
         this.accentColor,
-        0.8
+        0.5
       );
-
       drawSprite(
         "/solid.png",
         Vector2(sliderX, sliderY - sliderHeight / 2),
         Vector2(filledWidth, sliderHeight),
-        { ...fillColor, a: this.fadeProgress * 255 }
+        { ...fillColor, a: alpha }
       );
     }
 
     const knobX = sliderX + sliderWidth * this.sliderValue;
-    const knobColor =
-      this.sliderHovered || this.isDraggingSlider
-        ? { r: 255, g: 255, b: 255, a: this.fadeProgress * 255 }
-        : { r: 200, g: 200, b: 200, a: this.fadeProgress * 255 };
-
     drawSprite(
-      "/solid.png",
+      "/circle.png",
       Vector2(knobX - knobSize / 2, sliderY - knobSize / 2),
       Vector2(knobSize, knobSize),
-      knobColor
+      this.sliderHovered || this.isDraggingSlider
+        ? { r: 255, g: 255, b: 255, a: alpha }
+        : { r: 225, g: 225, b: 225, a: alpha }
     );
 
-    const durationMs = this.currentMap.duration || 0;
-    const currentMs = durationMs * this.sliderValue;
-    const minutes = Math.floor(currentMs / 60000);
-    const seconds = Math.floor((currentMs % 60000) / 1000);
-    const timeText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-
     drawText(
-      timeText,
-      Vector2(sliderX + sliderWidth + 20, sliderY - 13),
-      24,
-      { r: 180, g: 180, b: 180, a: this.fadeProgress * 255 },
+      format(durationMs),
+      Vector2(sliderX + sliderWidth + 18, y - 10),
+      20,
+      textColor,
       "left"
     );
 

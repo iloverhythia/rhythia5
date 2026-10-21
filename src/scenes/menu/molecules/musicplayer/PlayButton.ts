@@ -23,6 +23,7 @@ export class PlayButton {
   private borderFillProgress: number = 0;
   private letterWaveAnimation: number[] = []; 
   private wasHovered: boolean = false;
+  public subtitle: string = "";
 
   private buttonWidth: number = 280;
   private buttonHeight: number = 65;
@@ -150,9 +151,21 @@ export class PlayButton {
 
     const fontSize = 32; 
     const letterSpacing = 20; 
+    const textShift = this.subtitle ? 9 : 0;
+
+    if (this.subtitle) {
+      drawText(
+        this.subtitle,
+        Vector2(centerX, buttonY + this.buttonHeight / 2 + 9),
+        15,
+        { r: 200, g: 200, b: 200, a: Math.round(opacity * 0.8) },
+        "center"
+      );
+    }
 
     if (!this.animateLetters) {
-      const textY = buttonY + this.buttonHeight / 2 - fontSize / 2.2;
+      const textY =
+        buttonY + this.buttonHeight / 2 - fontSize / 2.2 - textShift;
       const letterOpacity = this.hovered ? 0.95 : 0.8;
       drawText(
         this.text,
@@ -185,7 +198,8 @@ export class PlayButton {
           buttonY +
           this.buttonHeight / 2 -
           (fontSize * animScale) / 2.2 +
-          animOffsetY;
+          animOffsetY -
+          textShift;
 
         const letterOpacity = this.hovered ? 0.95 : 0.8;
 
