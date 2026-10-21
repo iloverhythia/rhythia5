@@ -15,12 +15,12 @@ import { PlayButton } from "./musicplayer/PlayButton";
 import { Leaderboard } from "./musicplayer/Leaderboard";
 import { logger } from "../../../utils/logger";
 import type { FinalResultsPayload } from "../../../utils/results";
-import { FavoriteButton } from "./musicplayer/FavoriteButton";
 import { isFavorite, toggleFavorite } from "../../../utils/storage/favorites";
 import { VisualizeButton } from "./musicplayer/VisualizeButton";
 import { ModeButtons } from "./musicplayer/ModeButtons";
 import { SpeedContextMenu } from "./musicplayer/SpeedContextMenu";
 import { GameScene } from "../../game";
+import { ModeManager } from "../../game/modes";
 import { createPopup } from "../atoms/Popup";
 import { searchUsers } from "rhythia-api";
 import { inRect } from "../../../utils/geometry";
@@ -40,12 +40,13 @@ export class MusicPlayer {
   private timeSlider: TimeSlider;
   private playButton: PlayButton;
   private leaderboard: Leaderboard;
-  private favoriteButton: FavoriteButton;
+  private bookmarkButton: VisualizeButton;
+  private collectionHandler: (() => void) | null = null;
   private visualizeButton: VisualizeButton;
   private modeButtons: ModeButtons;
   private isCurrentFavorite: boolean = false;
   private currentOnlineId: string | null = null;
-  private favoriteButtonPosition = { x: 0, y: 0 };
+  private bookmarkButtonPosition = { x: 0, y: 0 };
   private visualizeButtonPosition = { x: 0, y: 0 };
   private albumShiftProgress: number = 0;
   private authorRect: { x: number; y: number; w: number; h: number } = {
@@ -75,7 +76,7 @@ export class MusicPlayer {
     this.leaderboard.setOnScoreClick((payload) => {
       this.openResultsHandler?.(payload);
     });
-    this.favoriteButton = new FavoriteButton();
+    this.bookmarkButton = new VisualizeButton("/icons/bookmark-plus.png");
     this.visualizeButton = new VisualizeButton();
     this.modeButtons = new ModeButtons();
 
@@ -184,16 +185,9 @@ export class MusicPlayer {
 
       const favX = contentCenterX + 280 / 2 + 20;
       const favY = playButtonY;
-      this.favoriteButtonPosition = { x: favX, y: favY };
-      const favClicked = this.favoriteButton.update(
-        mousePos,
-        favX,
-        favY,
-        this.isCurrentFavorite,
-      );
-
-      if (favClicked) {
-        this.onFavoriteToggled();
+      this.bookmarkButtonPosition = { x: favX, y: favY };
+      if (this.bookmarkButton.update(mousePos, favX, favY)) {
+        this.collectionHandler?.();
       }
 
       const modeButtonsY = playButtonY + 65 + 16;
@@ -306,6 +300,12 @@ export class MusicPlayer {
 
       this.timeSlider.draw(contentCenterX, titleY + 240);
 
+      const stars =
+        (this.currentMap.starRating || 0) *
+        (ModeManager.getMode().musicPitch ?? 1) *
+        (ModeManager.getActiveModeIds().includes("hardrock") ? 1.12 : 1);
+      const maxRp = Math.round((stars * 50) ** 2 / 1000) * 2;
+      this.playButton.subtitle = maxRp > 0 ? `MAX ${maxRp} RP` : "";
       this.playButton.draw(contentCenterX, titleY + 240 + 60);
 
       const favX = contentCenterX + 280 / 2 + 20;
@@ -317,7 +317,7 @@ export class MusicPlayer {
         this.visualizeButton.getSize() -
         20;
       this.visualizeButton.draw(visualizeX, favY);
-      this.favoriteButton.draw(favX, favY);
+      this.bookmarkButton.draw(favX, favY);
 
       const modeButtonsY = favY + 65 + 16;
       this.modeButtons.draw(contentCenterX, modeButtonsY);
@@ -337,7 +337,7 @@ export class MusicPlayer {
 
     const author = this.currentMap.mappers?.join(", ") || "Unknown Author";
     const maxAuthorLength = 40;
-    const authorText = `mapped by ${author}`;
+    const authorText = `Mapped by ${author}`;
     const displayAuthor =
       authorText.length > maxAuthorLength
         ? authorText.substring(0, maxAuthorLength - 3) + "..."
@@ -346,7 +346,7 @@ export class MusicPlayer {
     const fontSize = 28;
     const size = measureText(displayAuthor, fontSize, 1);
     const x = centerX - size.width / 2;
-    const y = titleY + 48;
+    const y = titleY + 88;
 
     this.authorRect = { x, y, w: size.width, h: size.height };
   }
@@ -422,16 +422,13 @@ export class MusicPlayer {
       );
     }
 
-    const favoriteSize = this.favoriteButton.getSize();
-    if (this.favoriteButton.isHovered()) {
-      const label = this.isCurrentFavorite
-        ? "Remove from favorites"
-        : "Add to favorites";
+    const bookmarkSize = this.bookmarkButton.getSize();
+    if (this.bookmarkButton.isHovered()) {
       this.drawTooltip(
-        label,
-        this.favoriteButtonPosition.x + favoriteSize / 2,
-        this.favoriteButtonPosition.y,
-        favoriteSize,
+        "Add to collection",
+        this.bookmarkButtonPosition.x + bookmarkSize / 2,
+        this.bookmarkButtonPosition.y,
+        bookmarkSize,
       );
     }
 
@@ -518,7 +515,15 @@ export class MusicPlayer {
     this.transitionToGame(false);
   }
 
-  private onFavoriteToggled(): void {
+  public setCollectionHandler(handler: () => void): void {
+    this.collectionHandler = handler;
+  }
+
+  public isCurrentMapFavorite(): boolean {
+    return this.isCurrentFavorite;
+  }
+
+  public toggleCurrentFavorite(): void {
     if (!this.currentMap) return;
     if (!this.currentOnlineId) return;
     try {

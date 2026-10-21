@@ -32,9 +32,10 @@ export class MapStats {
 
     const statusY = startY;
     const statusRaw = this.currentMap.onlineStatus || "Unknown";
-    const statusText = statusRaw.toUpperCase();
+    const statusText =
+      statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1).toLowerCase();
 
-    const isRanked = statusText === "RANKED";
+    const isRanked = statusText === "Ranked";
     const iconColor = isRanked
       ? { r: 90, g: 180, b: 110, a: this.fadeProgress * 255 } 
       : { r: 200, g: 200, b: 200, a: this.fadeProgress * 255 }; 
@@ -47,7 +48,7 @@ export class MapStats {
     );
 
     const statusColor =
-      statusText === "RANKED"
+      isRanked
         ? { r: 90, g: 180, b: 110, a: this.fadeProgress * 255 } 
         : { r: 150, g: 150, b: 150, a: this.fadeProgress * 255 }; 
 
@@ -78,18 +79,18 @@ export class MapStats {
     const durationSeconds = Math.floor((this.currentMap.duration || 0) / 1000);
     const minutes = Math.floor(durationSeconds / 60);
     const seconds = durationSeconds % 60;
-    const durationText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    const durationText = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
     drawSprite(
       "/time.png",
-      Vector2(rightColumnX, statusY - iconSize / 2),
+      Vector2(rightColumnX, notesY - iconSize / 2),
       Vector2(iconSize, iconSize),
       { r: 200, g: 200, b: 200, a: this.fadeProgress * 255 }
     );
 
     drawText(
       `${durationText}`,
-      Vector2(rightColumnX + iconSize + iconTextGap, statusY - fontSize / 2),
+      Vector2(rightColumnX + iconSize + iconTextGap, notesY - fontSize / 2),
       fontSize,
       { r: 180, g: 180, b: 180, a: this.fadeProgress * 255 },
       "left"
@@ -99,7 +100,7 @@ export class MapStats {
 
     drawSprite(
       "/star.png",
-      Vector2(rightColumnX, notesY - iconSize / 2),
+      Vector2(rightColumnX, statusY - iconSize / 2),
       Vector2(iconSize, iconSize),
       {
         r: 200,
@@ -110,8 +111,8 @@ export class MapStats {
     );
 
     drawText(
-      `${starRating.toFixed(1)} stars`,
-      Vector2(rightColumnX + iconSize + iconTextGap, notesY - fontSize / 2),
+      `${starRating.toFixed(2)} stars`,
+      Vector2(rightColumnX + iconSize + iconTextGap, statusY - fontSize / 2),
       fontSize,
       {
         r: 180,

@@ -12,6 +12,11 @@ import NoFailMode from "./NoFailMode";
 import MirrorMode from "./MirrorMode";
 import OverlayDemoMode from "./OverlayDemoMode";
 import HardrockMode from "./HardrockMode";
+import SuddenDeathMode from "./SuddenDeathMode";
+import GhostMode from "./GhostMode";
+import ChaosMode from "./ChaosMode";
+import SpinMode from "./SpinMode";
+import AnonymousMode from "./AnonymousMode";
 
 
 export interface GameMode {
@@ -100,7 +105,6 @@ type Conflict =
   | "resolveSettings"
   | "createHealthModel"
   | "transformTime"
-  | "getNotes"
   | "provideNoteRenderer";
 
 function detectConflict(
@@ -113,7 +117,6 @@ function detectConflict(
     { field: "resolveSettings", key: "resolveSettings" },
     { field: "createHealthModel", key: "createHealthModel" },
     { field: "transformTime", key: "transformTime" },
-    { field: "getNotes", key: "getNotes" },
     { field: "provideNoteRenderer", key: "provideNoteRenderer" },
   ];
 
@@ -323,7 +326,9 @@ class _ModeManager {
       (m) => !!m.createHealthModel
     )?.createHealthModel;
     const transformTime = active.find((m) => !!m.transformTime)?.transformTime;
-    const getNotes = active.find((m) => !!m.getNotes)?.getNotes;
+    const noteModes = listModes().filter(
+      (m) => !!m.getNotes && active.includes(m)
+    );
     const provideNoteRenderer = active.find(
       (m) => !!m.provideNoteRenderer
     )?.provideNoteRenderer;
@@ -345,9 +350,14 @@ class _ModeManager {
       transformTime: transformTime
         ? (t: number, s: Readonly<GameState>) => transformTime(t, s)
         : undefined,
-      getNotes: getNotes
-        ? (map: SoundSpaceMemoryMap) => getNotes(map)
-        : undefined,
+      getNotes:
+        noteModes.length > 0
+          ? (map: SoundSpaceMemoryMap) =>
+              noteModes.reduce(
+                (notes, m) => m.getNotes?.({ ...map, notes }) ?? notes,
+                map.notes
+              )
+          : undefined,
       provideNoteRenderer: provideNoteRenderer
         ? (defaultRenderer: NoteRenderer) =>
             provideNoteRenderer(defaultRenderer)
@@ -379,6 +389,11 @@ registerMode(Speed125Mode);
 registerMode(Speed135Mode);
 registerMode(Speed145Mode);
 registerMode(HardrockMode);
+registerMode(SuddenDeathMode);
+registerMode(GhostMode);
+registerMode(ChaosMode);
+registerMode(SpinMode);
+registerMode(AnonymousMode);
 
 export const BuiltinModes = {
   DefaultMode,
@@ -393,6 +408,11 @@ export const BuiltinModes = {
   Speed135Mode,
   Speed145Mode,
   HardrockMode,
+  SuddenDeathMode,
+  GhostMode,
+  ChaosMode,
+  SpinMode,
+  AnonymousMode,
 };
 export const Modes = {
   registerMode,

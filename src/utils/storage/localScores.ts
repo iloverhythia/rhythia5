@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import AnonymousMode from "../../scenes/game/modes/AnonymousMode";
 
 export interface LocalScoreEntry {
   score: number;
@@ -44,7 +45,7 @@ function saveDB(db: LocalScoresDB): void {
 }
 
 export function addLocalScore(mapId: string, entry: LocalScoreEntry): void {
-  if (!mapId) return;
+  if (!mapId || entry.modeIds?.includes(AnonymousMode.id)) return;
   const id = String(mapId);
   const db = loadDB();
   const list = Array.isArray(db[id]) ? db[id] : [];
