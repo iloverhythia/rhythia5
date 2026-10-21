@@ -64,14 +64,14 @@ export function skinDir(folder: string): string {
   return dir;
 }
 
-export function listSkinFiles(folder: string): string[] {
+export function listSkinFiles(folder: string, ext: string = ".png"): string[] {
   if (!skinFiles.has(folder)) {
     const dir = skinDir(folder);
     skinFiles.set(
       folder,
       fs
         .readdirSync(dir)
-        .filter((file: string) => file.toLowerCase().endsWith(".png"))
+        .filter((file: string) => file.toLowerCase().endsWith(ext))
         .map((file: string) => path.join(dir, file))
     );
   }
@@ -90,23 +90,27 @@ export function customNoteMeshes(): NoteMesh[] {
   return ConfigManager.getExtra<NoteMesh[]>("customNoteMeshes", []);
 }
 
-function loadedSkin(id: string, name: string, create: () => BaseNoteRenderer): NoteSkin {
-  if (!loadedSkins.has(id)) loadedSkins.set(id, { id, name, renderer: create() });
-  return loadedSkins.get(id)!;
+function loadedSkin(id: string, name: string, create: () => BaseNoteRenderer, key: string = id): NoteSkin {
+  if (!loadedSkins.has(key)) loadedSkins.set(key, { id, name, renderer: create() });
+  return loadedSkins.get(key)!;
 }
 
 export function noteSkins(): NoteSkin[] {
+  const names = ConfigManager.getExtra<Record<string, string>>("noteSkinNames", {});
   return [
     ...builtinSkins,
     ...customNoteMeshes().map((mesh) =>
-      loadedSkin(mesh.id!, mesh.name, () => new MeshNoteRenderer(config, mesh))
+      loadedSkin(mesh.id!, mesh.name, () => new MeshNoteRenderer(config, mesh), JSON.stringify(mesh))
+    ),
+    ...listSkinFiles("meshes", ".obj").map((file) =>
+      loadedSkin(file, `${path.basename(file, path.extname(file))} (custom)`, () => new MeshNoteRenderer(config, file))
     ),
     ...listSkinFiles("noteskins").map((file) =>
       loadedSkin(file, path.basename(file, path.extname(file)), () =>
         new SpriteNoteRenderer(config, file, true)
       )
     ),
-  ];
+  ].map((skin) => (names[skin.id] ? { ...skin, name: names[skin.id] } : skin));
 }
 
 export function selectedNoteSkin(): NoteSkin {

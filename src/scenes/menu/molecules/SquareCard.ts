@@ -6,6 +6,7 @@ import { BeatmapData } from "../../../utils/types";
 import { lerpDelta } from "../../../utils/lerp";
 import { playFx, playMusic, getVolumes } from "../../../utils/soundManager";
 import { logger } from "../../../utils/logger";
+import { ConfigManager } from "../../../utils/configManager";
 import { SoundSpaceMemoryMap } from "../../../utils/storage/ssmm";
 import { getScrollY, setScrollY } from "../../../utils/scroll";
 
@@ -473,7 +474,7 @@ export class SquareCard {
           );
         }
         const audioPath = await this.getAudioPath(mapId);
-        if (audioPath) {
+        if (audioPath && ConfigManager.getExtra("autoPreviewSong", true)) {
           const volumes = getVolumes();
           playMusic(audioPath, volumes.music);
         }
@@ -512,7 +513,7 @@ export class SquareCard {
             );
           }
           const audioPath = await this.getAudioPath(mapId);
-          if (audioPath) {
+          if (audioPath && ConfigManager.getExtra("autoPreviewSong", true)) {
             const volumes = getVolumes();
             playMusic(audioPath, volumes.music);
           }

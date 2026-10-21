@@ -28,6 +28,7 @@ import "../scenes/settings/register/gameplay";
 import "../scenes/settings/register/interface";
 import "../scenes/settings/register/cursorAudio";
 import "../scenes/settings/register/skins";
+import "../scenes/settings/register/media";
 
 const PLACEHOLDER_ICON_PATH = "/customize.png" as const;
 

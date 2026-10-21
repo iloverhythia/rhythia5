@@ -23,7 +23,12 @@ export class CoverImageDecoration implements BackgroundDecoration {
     const customPng = path.join(process.cwd(), "cache", "custom_background.png");
     const customJpg = path.join(process.cwd(), "cache", "custom_background.jpg");
     const alpha = Math.round(255 * coverOpacity);
-    const color: Color = { r: 255, g: 255, b: 255, a: alpha };
+    const color: Color = {
+      r: context.settings.customBgColorRed ?? 255,
+      g: context.settings.customBgColorGreen ?? 255,
+      b: context.settings.customBgColorBlue ?? 255,
+      a: alpha,
+    };
 
     let displayW = Rhythia.gameWidth;
     let displayH = Rhythia.gameHeight;
@@ -86,7 +91,7 @@ export class CoverImageDecoration implements BackgroundDecoration {
     }
 
     drawSprite(
-      "/bg.jpg",
+      color.r + color.g + color.b < 765 ? "/solid.png" : "/bg.jpg",
       Vector2(worldLeftX, worldTopY),
       Vector2(worldWidth, worldHeight),
       color

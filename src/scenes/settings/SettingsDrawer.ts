@@ -14,13 +14,15 @@ import {
 } from "raylib";
 import * as fs from "fs";
 import * as path from "path";
+import { exec } from "child_process";
 import { openDialog } from "nativefiledialog";
 import { ScrollableDrawer } from "../menu/atoms/ScrollableDrawer";
 import { PANEL } from "../menu/atoms/BaseDrawer";
 import { createInputBox, InputBox, InputBoxProps } from "../menu/atoms/InputBox";
 import { createPopup } from "../menu/atoms/Popup";
 import { GamePreview } from "../customization/atoms/GamePreview";
-import { getSettingsPage, hasFlag, listSettingsPages, settingsNavigation, toggleFlag, Rect, RGB, SettingsRow } from "./pages";
+import { getSettingsPage, hasFlag, listSettingsPages, registerSettingsPage, settingsNavigation, toggleFlag, Rect, RGB, SettingsRow } from "./pages";
+import { choiceRows } from "./choices";
 import { ConfigManager } from "../../utils/configManager";
 import { GAME_SETTINGS_SCHEMA, toGameConfigKey } from "../../utils/gameSettingsSchema";
 import { drawRect, drawBorderRect } from "../../ui/draw";
@@ -34,6 +36,8 @@ import { Rhythia } from "../../atoms/Rhythia";
 import { Maps } from "../../utils/maps";
 import { toastManager } from "../../utils/toastManager";
 import type { SoundSpaceMemoryMap } from "../../utils/storage/ssmm";
+import { getReplaysDir } from "../../utils/replays";
+import { restartAppInPlace } from "../../atoms/sysutils/scenes";
 
 type Labeled = Extract<SettingsRow, { label: string }>;
 type Slider = Extract<SettingsRow, { kind: "slider" }>;
@@ -68,6 +72,9 @@ const rgbToHsv = ({ r, g, b }: RGB): number[] => {
   const h = d === 0 ? 0 : max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
   return [(h * 60 + 360) % 360, max ? d / max : 0, max / 255];
 };
+
+const openFolder = (dir: string) =>
+  exec(process.platform === "win32" ? `explorer "${dir}"` : process.platform === "darwin" ? `open "${dir}"` : `xdg-open "${dir}"`);
 
 const fit = (text: string, size: number, maxWidth: number) => {
   let out = text;
@@ -115,6 +122,19 @@ export class SettingsDrawer extends ScrollableDrawer {
   constructor(private getSelectedMap: () => SoundSpaceMemoryMap | null) {
     super();
     settingsNavigation.open = (id) => this.navigate(id);
+    registerSettingsPage({
+      id: "presets",
+      title: "Presets",
+      subtitle: "Switch or create settings profiles",
+      rows: () => [
+        ...choiceRows(
+          this.profiles.map(({ id, name }) => ({ id, label: name })),
+          () => ConfigManager.getActiveProfileId(),
+          (id) => ConfigManager.applyProfile(id)
+        ),
+        { kind: "button", label: "Create New From Current", onClick: () => this.createProfile() },
+      ],
+    });
   }
 
   private get page() {
@@ -209,7 +229,7 @@ export class SettingsDrawer extends ScrollableDrawer {
       },
       {
         kind: "custom",
-        height: () => 66,
+        height: () => 104,
         draw: (rect, mouse) =>
           this.actions(rect).forEach(({ label, rect: r, active }) => {
             drawField(r, label, "center", 15, active || hit(mouse, r));
@@ -282,20 +302,20 @@ export class SettingsDrawer extends ScrollableDrawer {
     const activeId = ConfigManager.get().activeProfileId;
     const index = this.profiles.findIndex((p) => p.id === activeId);
     const refresh = () => (this.profiles = ConfigManager.getProfiles());
-    const prompt = (message: string, initialValue: string, onConfirm: (value: string) => void) =>
-      createPopup("prompt").showPrompt({ message, initialValue, placeholder: "Profile name", onConfirm });
     if (hit(mouse, parts.name)) {
       ConfigManager.applyProfile(this.profiles[(index + 1) % this.profiles.length].id);
     } else if (hit(mouse, parts.rename)) {
-      prompt("Rename profile", this.profiles[index]?.name ?? "", (value) => {
-        ConfigManager.renameProfile(activeId, value);
-        refresh();
+      createPopup("prompt").showPrompt({
+        message: "Rename profile",
+        initialValue: this.profiles[index]?.name ?? "",
+        placeholder: "Profile name",
+        onConfirm: (value) => {
+          ConfigManager.renameProfile(activeId, value);
+          refresh();
+        },
       });
     } else if (hit(mouse, parts.add)) {
-      prompt("New profile", "", (value) => {
-        ConfigManager.createProfile(value.trim() || "Profile");
-        refresh();
-      });
+      this.createProfile();
     } else if (hit(mouse, parts.remove)) {
       if (activeId === "default") toastManager.show("The default profile can't be removed");
       else
@@ -311,31 +331,41 @@ export class SettingsDrawer extends ScrollableDrawer {
     return true;
   }
 
+  private createProfile(): void {
+    createPopup("prompt").showPrompt({
+      message: "New profile",
+      initialValue: "",
+      placeholder: "Profile name",
+      onConfirm: (value) => {
+        ConfigManager.createProfile(value.trim() || "Profile");
+        this.profiles = ConfigManager.getProfiles();
+      },
+    });
+  }
+
   private actions(rect: Rect) {
     const w = (rect.w - 16) / 3;
     const showLocked = ConfigManager.getExtra("settingsShowLocked", false);
     const failed = () => toastManager.show("Import failed");
     return [
-      { label: "Export settings", rect: { x: rect.x, y: rect.y, w, h: 28 }, active: false, run: () => this.exportSettings() },
+      { label: "Export settings", active: false, run: () => this.exportSettings() },
+      { label: "Import settings", active: false, run: () => void this.importSettings().catch(failed) },
+      { label: "Show locked", active: showLocked, run: () => ConfigManager.setExtra("settingsShowLocked", !showLocked) },
+      { label: "Import files", active: false, run: () => void this.importFiles().catch(failed) },
+      { label: "Presets", active: false, run: () => this.navigate("presets") },
+      { label: "Open user folder", active: false, run: () => openFolder(ConfigManager.getAppDataDir()) },
+      { label: "Open replay folder", active: false, run: () => openFolder(getReplaysDir()) },
       {
-        label: "Import settings",
-        rect: { x: rect.x + w + 8, y: rect.y, w, h: 28 },
+        label: "Reload content",
         active: false,
-        run: () => void this.importSettings().catch(failed),
+        run: () =>
+          createPopup("confirm").showConfirm({
+            message: "Reload all maps and skins?",
+            confirmText: "OK",
+            onConfirm: () => void restartAppInPlace(),
+          }),
       },
-      {
-        label: "Show locked",
-        rect: { x: rect.x + (w + 8) * 2, y: rect.y, w, h: 28 },
-        active: showLocked,
-        run: () => ConfigManager.setExtra("settingsShowLocked", !showLocked),
-      },
-      {
-        label: "Import files",
-        rect: { x: rect.x, y: rect.y + 38, w: rect.w, h: 28 },
-        active: false,
-        run: () => void this.importFiles().catch(failed),
-      },
-    ];
+    ].map((action, i) => ({ ...action, rect: { x: rect.x + (i % 3) * (w + 8), y: rect.y + Math.floor(i / 3) * 38, w, h: 28 } }));
   }
 
   private exportSettings(): void {
@@ -405,7 +435,7 @@ export class SettingsDrawer extends ScrollableDrawer {
 
   private parts(row: Labeled, rect: Rect) {
     const reset = this.canReset(row) ? { x: rect.x + rect.w - 46, y: rect.y + 11, w: 34, h: 36 } : null;
-    const valueW = row.kind === "color" ? 122 : 74;
+    const valueW = row.kind === "color" ? 122 : row.kind === "slider" ? Math.max(74, measureText(formatValue(row, row.get()), 18).width + 20) : 74;
     const labelEnd = rect.x + 14 + measureText(row.label, 22).width;
     return {
       reset,

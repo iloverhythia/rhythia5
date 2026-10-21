@@ -6,11 +6,21 @@ import {
   rlRotatef,
   GetFrameTime,
   rlScalef,
+  Color,
+  ColorFromHSV,
 } from "raylib";
 import { drawSprite } from "../../../utils/sprite";
 import { drawText, measureText } from "../../../utils/text";
 import { Rhythia } from "../../../atoms/Rhythia";
-import { GameUIPanel, GameUIPanelCommonArgs } from "./GameUIPanel";
+import {
+  GameUIPanel,
+  GameUIPanelCommonArgs,
+  parseHexColor,
+  rainbowHue,
+  uiSetting,
+} from "./GameUIPanel";
+
+type Rank = "FC" | "SS" | "S" | "A" | "B" | "C" | "D" | "F";
 
 export interface RightPanelArgs extends GameUIPanelCommonArgs {
   totalNotes: number;
@@ -25,40 +35,36 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
   }
 
   
-  private currentRank: "SS" | "S" | "A" | "B" | "C" | "D" | null = null;
-  private prevRank: "SS" | "S" | "A" | "B" | "C" | "D" | null = null;
+  private currentRank: Rank | null = null;
+  private prevRank: Rank | null = null;
   private rankProgress: number = 1; 
   private rankDirection: 1 | -1 = 1; 
   private readonly rankDuration: number = 0.5; 
 
-  private static rankOrder: ("D" | "C" | "B" | "A" | "S" | "SS")[] = [
-    "D",
-    "C",
-    "B",
-    "A",
-    "S",
-    "SS",
-  ];
+  private static rankOrder: Rank[] = ["F", "D", "C", "B", "A", "S", "SS", "FC"];
 
-  private getRankIndex(r: "SS" | "S" | "A" | "B" | "C" | "D"): number {
-    return RightGameUIPanel.rankOrder.indexOf(r as any);
+  private getRankIndex(r: Rank): number {
+    return RightGameUIPanel.rankOrder.indexOf(r);
   }
 
-  private computeLetterRank(
-    accuracy: number
-  ): "SS" | "S" | "A" | "B" | "C" | "D" | null {
-    if (Math.abs(accuracy - 100) < 1e-6) return "SS";
+  private computeLetterRank(accuracy: number, showFc: boolean): Rank {
+    if (Math.abs(accuracy - 100) < 1e-6) return showFc ? "FC" : "SS";
     if (accuracy >= 98) return "S";
     if (accuracy >= 95) return "A";
     if (accuracy >= 90) return "B";
     if (accuracy >= 85) return "C";
     if (accuracy >= 80) return "D";
-    return null;
+    return "F";
   }
 
-  private updateRankTransition(
-    next: "SS" | "S" | "A" | "B" | "C" | "D" | null
-  ): void {
+  private rankColor(rank: Rank, alpha: number): Color {
+    if (rank === "FC") return { ...parseHexColor("#fa6afa"), a: alpha };
+    if (rank === "SS")
+      return { ...ColorFromHSV(rainbowHue(), uiSetting("gradeSsSaturation"), uiSetting("gradeSsValue")), a: alpha };
+    return this.color(`grade${rank}Color` as const, alpha);
+  }
+
+  private updateRankTransition(next: Rank | null): void {
     const dt = GetFrameTime();
 
     
@@ -98,10 +104,10 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
   }
 
   public render(args: RightPanelArgs): void {
+    if ((args.settings?.simpleHud ?? 0) > 0) return;
     rlPushMatrix();
 
     const uiOpacity = args.settings?.uiOpacity ?? 0.15;
-    const uiTiltRate = args.settings?.uiTiltRate ?? 1.0;
     const playfieldScale = args.settings?.playfieldScale ?? 1.0;
     const uiScale = args.settings?.uiScale ?? 1.0;
 
@@ -121,12 +127,7 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
 
     const depth = args.closeDistance;
     rlTranslatef(planeX, planeY, depth);
-    const tiltCompensation = 1 - uiTiltRate;
-    rlTranslatef(
-      args.cameraTiltX * 100 * tiltCompensation,
-      args.cameraTiltY * 100 * tiltCompensation,
-      0
-    );
+    this.applyTilt(args);
     rlRotatef(10, 0, 1, 0);
     rlScalef(uiScale, uiScale, 1.0);
     if ((args.settings?.hudRightBackground ?? 1) > 0) {
@@ -139,7 +140,7 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
     const total = args.hits + args.misses;
     const accuracy = total > 0 ? (args.hits / total) * 100 : 100;
 
-    const letterRank = this.computeLetterRank(accuracy);
+    const letterRank = this.computeLetterRank(accuracy, (args.settings?.showFcGrade ?? 1) > 0);
     this.updateRankTransition(letterRank);
 
     const scoreText = `${this.formatScore(args.score)}`;
@@ -150,14 +151,14 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
         `SCORE`,
         Vector2(0, startY - 70),
         18,
-        { r: 180, g: 180, b: 180, a: textOpacity },
+        this.color("panelText", textOpacity * 0.7),
         "center"
       );
       drawText(
         scoreText,
         Vector2(0, scoreY),
         scoreFontSize,
-        { r: 255, g: 255, b: 255, a: textOpacity },
+        this.color("scoreTextColor", textOpacity),
         "center"
       );
     }
@@ -177,10 +178,10 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
         const prevAlpha = Math.round(textOpacity * (1 - ease));
         const prevCenterX = this.rankDirection * offset * ease; 
         drawSprite(
-          `/score_${this.prevRank}.png`,
+          `/grade_${this.prevRank}.png`,
           Vector2(-badgeSize / 2 + prevCenterX, badgeTop),
           Vector2(badgeSize, badgeSize),
-          { r: 255, g: 255, b: 255, a: prevAlpha }
+          this.rankColor(this.prevRank, prevAlpha)
         );
       }
 
@@ -191,10 +192,10 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
             ? -this.rankDirection * offset * (1 - ease)
             : 0; 
         drawSprite(
-          `/score_${this.currentRank}.png`,
+          `/grade_${this.currentRank}.png`,
           Vector2(-badgeSize / 2 + currCenterX, badgeTop),
           Vector2(badgeSize, badgeSize),
-          { r: 255, g: 255, b: 255, a: currAlpha }
+          this.rankColor(this.currentRank, currAlpha)
         );
       }
 
@@ -208,7 +209,7 @@ export class RightGameUIPanel extends GameUIPanel<RightPanelArgs> {
         `${notesRemaining} notes left`,
         Vector2(0, notesLeftY),
         16,
-        { r: 140, g: 140, b: 140, a: textOpacity },
+        this.color("panelText", textOpacity * 0.55),
         "center"
       );
     }

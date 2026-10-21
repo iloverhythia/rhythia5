@@ -9,6 +9,7 @@ import {
   getGameSettingByKey,
   toGameConfigKey,
 } from "../../../utils/gameSettingsSchema";
+import { uiColor, uiSetting } from "../panels/GameUIPanel";
 
 export type PauseButtonId = "resume" | "retry" | "settings" | "menu";
 
@@ -98,25 +99,22 @@ export class PauseOverlay {
   public draw(): void {
     if (!this.active) return;
 
-    
-    const overlayColor = { r: 12, g: 12, b: 12, a: 200 };
+    const opacity = Math.round(255 * uiSetting("pauseUiOpacity"));
     drawSprite(
       "/solid.png",
       Vector2(0, 0),
       Vector2(Rhythia.gameWidth, Rhythia.gameHeight),
-      overlayColor
+      { r: 12, g: 12, b: 12, a: opacity }
     );
 
     const centerX = Rhythia.gameWidth / 2;
     const centerY = Rhythia.gameHeight / 2 - 40;
 
-    
-    const titleColor = { r: 235, g: 235, b: 235, a: 255 };
     drawText(
       "Paused",
       Vector2(centerX, centerY - 120),
       64,
-      titleColor,
+      uiColor("unpauseEmptyColor", opacity),
       "center"
     );
 
@@ -124,6 +122,9 @@ export class PauseOverlay {
       const remainingSeconds = Math.ceil(
         Math.max(0, this.resumeCountdownSeconds)
       );
+      const progress = 1 - this.resumeCountdownSeconds / this.resumeCountdownDuration;
+      drawSprite("/solid.png", Vector2(centerX - 160, centerY - 48), Vector2(320, 6), uiColor("unpauseEmptyColor", opacity));
+      drawSprite("/solid.png", Vector2(centerX - 160, centerY - 48), Vector2(320 * progress, 6), uiColor("unpauseFillColor", opacity));
       
       const countdownColor = { r: 220, g: 220, b: 220, a: 255 };
       drawText(
@@ -137,8 +138,7 @@ export class PauseOverlay {
         "Press ESC to cancel",
         Vector2(centerX, centerY + 14),
         24,
-        
-        { r: 190, g: 190, b: 190, a: 255 },
+        uiColor("howToQuit", opacity),
         "center"
       );
       return; 

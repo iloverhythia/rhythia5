@@ -48,6 +48,7 @@ export class ModeButtons {
         { id: "speed125", label: "x1.25" },
         { id: "speed135", label: "x1.35" },
         { id: "speed145", label: "x1.45" },
+        { id: "speedCustom", label: "Custom" },
       ],
       onSelect: (id) => {
         if (id === "default") {

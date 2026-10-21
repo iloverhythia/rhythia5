@@ -26,6 +26,7 @@ import { addLocalScore } from "../../utils/storage/localScores";
 import { HealthModel } from "./health/HealthModel";
 import { SoundSpaceHealthModel } from "./health/SoundSpaceHealthModel";
 import { ModeManager } from "./modes";
+import { gameSettingValue } from "../settings/choices";
 
 export interface GameState {
   currentMsTime: number;
@@ -48,6 +49,7 @@ export interface GameStats {
   accuracy: number;
   score: number;
   maxCombo: number;
+  pauses: number;
 }
 
 
@@ -57,8 +59,9 @@ export class GameLogic {
   public noteHitDetector: NoteHitDetector;
   private performanceTracker: PerformanceTracker;
 
-  
-  private readonly musicStartOffset: number = 3000;
+  private get musicStartOffset(): number {
+    return gameSettingValue("leadInTime") * Math.max(0.001, ModeManager.getMode().musicPitch ?? 1.0);
+  }
 
   
   private readonly skipGapMs: number = 5000;
@@ -74,6 +77,7 @@ export class GameLogic {
 
   private score: number = 0;
   private maxCombo: number = 0;
+  private pauses: number = 0;
 
   private enableIntroDelay: boolean = false;
   private pendingSceneReturn: boolean = false;
@@ -158,6 +162,7 @@ export class GameLogic {
     this.performanceTracker.resetCurrentNoteIndex();
     this.score = 0;
     this.maxCombo = 0;
+    this.pauses = 0;
   }
 
   private resetEndFlags(): void {
@@ -230,6 +235,9 @@ export class GameLogic {
 
   public update(settings?: Partial<GameSettings>): void {
     const deltaSeconds = GetFrameTime();
+    this.noteHitDetector.hitWindowMs = settings?.hitWindow ?? 55;
+    this.noteHitDetector.hitboxSize = settings?.hitboxSize ?? 1.14;
+    this.noteHitDetector.counterSpeed = (settings?.counterSpeed ?? 1) > 0;
     this.updateResumePitch(deltaSeconds);
     this.updateFailSlowStop(deltaSeconds);
 
@@ -667,7 +675,7 @@ export class GameLogic {
     }
 
     if (result.newlyMissed) {
-      if (!this.previewMode) playSoundEffect("miss");
+      if (!this.previewMode) playSoundEffect("miss", note[1] - 1);
       if (!this.replayPlayback) this.healthModel.onNoteMiss();
       try {
         this.replayObserver?.recordNoteMiss?.(
@@ -711,6 +719,7 @@ export class GameLogic {
       accuracy,
       score: this.score,
       maxCombo: this.maxCombo,
+      pauses: this.pauses,
     };
   }
 
@@ -762,6 +771,7 @@ export class GameLogic {
 
   public pauseGame(): void {
     if (this.pauseStartTime !== null) return;
+    this.pauses++;
 
     const currentPitch =
       this.resumePitchTarget ?? getMusicPitch() ?? this.defaultPitch;

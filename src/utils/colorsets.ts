@@ -7,6 +7,7 @@ import type { Color } from "raylib";
 export interface ColorsetInfo {
   name: string;
   colors: Color[];
+  mirror: boolean;
   filePath: string;
 }
 
@@ -35,14 +36,12 @@ function parseHexColor(line: string): Color | null {
   return { r, g, b, a: 255 } as Color;
 }
 
-function parseColorsetFile(filePath: string): Color[] | null {
+function parseColorsetFile(filePath: string): { colors: Color[]; mirror: boolean } | null {
   try {
-    const content = fs.readFileSync(filePath, "utf8");
-    const colors = content
-      .split(/\r?\n/)
-      .map(parseHexColor)
-      .filter((c): c is Color => !!c);
-    return colors.length > 0 ? colors : null;
+    const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+    const colors = lines.map(parseHexColor).filter((c): c is Color => !!c);
+    const mirror = lines.some((line) => line.trim().toLowerCase() === "m");
+    return colors.length > 0 ? { colors, mirror } : null;
   } catch {
     return null;
   }
@@ -67,10 +66,8 @@ export function listCustomColorsets(): ColorsetInfo[] {
       .map((e) => path.join(dir, e.name));
     const infos: ColorsetInfo[] = [];
     files.forEach((fp) => {
-      const colors = parseColorsetFile(fp);
-      if (colors && colors.length > 0) {
-        infos.push({ name: baseNameWithoutExt(fp), colors, filePath: fp });
-      }
+      const parsed = parseColorsetFile(fp);
+      if (parsed) infos.push({ name: baseNameWithoutExt(fp), ...parsed, filePath: fp });
     });
     return infos;
   } catch {
@@ -91,8 +88,8 @@ export function importColorset(pickedPath: string): ColorsetInfo | null {
 
     fs.copyFileSync(pickedPath, candidate);
 
-    const colors = parseColorsetFile(candidate);
-    if (!colors || colors.length === 0) {
+    const parsed = parseColorsetFile(candidate);
+    if (!parsed) {
       try {
         fs.unlinkSync(candidate);
       } catch {}
@@ -101,17 +98,14 @@ export function importColorset(pickedPath: string): ColorsetInfo | null {
 
     const info: ColorsetInfo = {
       name: baseNameWithoutExt(candidate),
-      colors,
+      ...parsed,
       filePath: candidate,
     };
 
     
     try {
       noteColorManager.removeCustomPalette(info.name);
-      noteColorManager.addCustomPalette({
-        name: info.name,
-        colors,
-      } as NoteColorPalette);
+      noteColorManager.addCustomPalette(info as NoteColorPalette);
     } catch {}
 
     return info;
@@ -120,15 +114,15 @@ export function importColorset(pickedPath: string): ColorsetInfo | null {
   }
 }
 
-export function saveColorset(name: string, colors: Color[]): void {
+export function saveColorset(name: string, colors: Color[], mirror: boolean = false): void {
   const hex = (c: Color) =>
     [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
   fs.writeFileSync(
     path.join(ensureColorsetsDir(), `${name}.txt`),
-    colors.map(hex).join("\n")
+    [...colors.map(hex), ...(mirror ? ["m"] : [])].join("\n")
   );
   noteColorManager.removeCustomPalette(name);
-  noteColorManager.addCustomPalette({ name, colors });
+  noteColorManager.addCustomPalette({ name, colors, mirror });
 }
 
 export function removeColorsetByName(name: string): boolean {
@@ -164,7 +158,7 @@ export function initializeColorPalettesFromDisk(): void {
   infos.forEach((i) => {
     try {
       noteColorManager.removeCustomPalette(i.name);
-      noteColorManager.addCustomPalette({ name: i.name, colors: i.colors });
+      noteColorManager.addCustomPalette({ name: i.name, colors: i.colors, mirror: i.mirror });
     } catch {}
   });
 

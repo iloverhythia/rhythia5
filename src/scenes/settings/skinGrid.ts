@@ -147,7 +147,8 @@ export function skinGridRows(options: {
         (card) =>
           (!state.favoritesOnly || favs.includes(card.id)) &&
           card.name.toLowerCase().includes(term)
-      );
+      )
+      .sort((a, b) => Number(favs.includes(b.id)) - Number(favs.includes(a.id)));
   };
 
   const buttonRect = (rect: Rect, i: number) => ({

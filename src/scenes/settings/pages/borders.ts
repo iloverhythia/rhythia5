@@ -1,4 +1,5 @@
-import { registerSettingsPage } from "../pages";
+import { gameSettingToggle, registerSettingsPage } from "../pages";
+import { gameSettingColor, gameSettingValue } from "../choices";
 import { pickFile, skinGridRows } from "../skinGrid";
 import { ConfigManager } from "../../../utils/configManager";
 import { borderSkins, selectedBorderSkin } from "../../game/borderSkins";
@@ -32,5 +33,14 @@ registerSettingsPage({
   subtitle: "Choose a border skin",
   icon: "/icons/border-outer.png",
   group: "Skinning",
-  rows: () => grid,
+  rows: () => [
+    gameSettingToggle("borderEnabled"),
+    gameSettingColor("Border Color", ["borderColorRed", "borderColorGreen", "borderColorBlue"], {
+      opacity: {
+        get: () => gameSettingValue("borderColorOpacity"),
+        set: (value) => ConfigManager.setGameSettings({ borderColorOpacity: value }),
+      },
+    }),
+    ...grid,
+  ],
 });

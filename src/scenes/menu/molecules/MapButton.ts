@@ -26,6 +26,7 @@ import { Maps } from "../../../utils/maps";
 import { Popup, createPopup } from "../atoms/Popup";
 import { playFx, playMusic, getVolumes } from "../../../utils/soundManager";
 import { logger } from "../../../utils/logger";
+import { ConfigManager } from "../../../utils/configManager";
 import { MenuScene } from "..";
 import { getPresentationInfo } from "../../../atoms/sysutils/rendering";
 
@@ -586,7 +587,7 @@ export class MapButton {
           );
         }
         const audioPath = await this.getAudioPath(mapId);
-        if (audioPath) {
+        if (audioPath && ConfigManager.getExtra("autoPreviewSong", true)) {
           const volumes = getVolumes();
           playMusic(audioPath, volumes.music);
         }
@@ -635,7 +636,7 @@ export class MapButton {
         }
 
         const audioPath = await this.getAudioPath(mapId);
-        if (audioPath) {
+        if (audioPath && ConfigManager.getExtra("autoPreviewSong", true)) {
           const volumes = getVolumes();
           playMusic(audioPath, volumes.music);
         }

@@ -123,6 +123,22 @@ export function gameSettingToggle(
   };
 }
 
+export function extraToggle(
+  key: string,
+  label: string,
+  defaultValue: boolean,
+  overrides: Partial<Extract<SettingsRow, { kind: "toggle" }>> = {}
+): SettingsRow {
+  return {
+    kind: "toggle",
+    label,
+    defaultValue,
+    get: () => ConfigManager.getExtra(key, defaultValue),
+    set: (value) => ConfigManager.setExtra(key, value),
+    ...overrides,
+  };
+}
+
 export type RowFlag = "settingsFavorites" | "settingsLocked";
 
 export const hasFlag = (flag: RowFlag, label: string): boolean =>
