@@ -3,6 +3,7 @@ import * as path from "path";
 import type { SoundSpaceMemoryMap } from "./ssmm";
 import { type SSPMParsedMap, SSPMParser } from "./sspmParser";
 import { type SSPMMap, V1SSPMParser } from "./sspmv1Parser";
+import { type RHMMap, isRHM, parseRHM } from "./rhmParser";
 import { Buffer } from "buffer";
 import { logger } from "../logger";
 
@@ -106,11 +107,15 @@ export async function addSSPMMap(
     onlineImage: string;
   },
 ) {
-  let map: SSPMParsedMap | SSPMMap;
-  try {
-    map = new SSPMParser(mapBytes).parse();
-  } catch (error) {
-    map = new V1SSPMParser(mapBytes).parse();
+  let map: SSPMParsedMap | SSPMMap | RHMMap;
+  if (isRHM(mapBytes)) {
+    map = await parseRHM(mapBytes);
+  } else {
+    try {
+      map = new SSPMParser(mapBytes).parse();
+    } catch (error) {
+      map = new V1SSPMParser(mapBytes).parse();
+    }
   }
 
   if (!map) return;
@@ -147,6 +152,14 @@ export async function addSSPMMap(
         (marker.data as any)["field0"].x,
         (marker.data as any)["field0"].y,
       ]);
+    generatedMap.notes = notes;
+  } else if ("mappers" in map) {
+    generatedMap.title = map.title;
+    generatedMap.id = map.id;
+    generatedMap.mappers = map.mappers;
+    generatedMap.difficulty = map.difficulty;
+    generatedMap.customDifficultyName = map.customDifficultyName;
+    notes = map.notes;
     generatedMap.notes = notes;
   } else {
     generatedMap.title = map.name;
