@@ -518,6 +518,13 @@ export function DrawCube(p: V3, w: number, h: number, l: number, c: Col) {
 }
 export function DrawGrid() {}
 export const Fade = (c: Col, a: number): Col => ({ r: c.r, g: c.g, b: c.b, a: Math.round(255 * Math.max(0, Math.min(1, a))) });
+export const ColorFromHSV = (hue: number, saturation: number, value: number): Col => {
+  const f = (n: number) => {
+    const k = (n + hue / 60) % 6;
+    return Math.round(255 * (value - value * saturation * Math.max(0, Math.min(k, 4 - k, 1))));
+  };
+  return { r: f(5), g: f(3), b: f(1), a: 255 };
+};
 export const ColorAlpha = Fade;
 export const ColorToInt = (c: Col) => ((c.r << 24) | (c.g << 16) | (c.b << 8) | c.a) >>> 0;
 export const GetColor = (h: number): Col => ({ r: (h >>> 24) & 255, g: (h >>> 16) & 255, b: (h >>> 8) & 255, a: h & 255 });
@@ -912,9 +919,9 @@ function decodePath(path: string): Promise<AudioBuffer | null> {
 }
 export function forgetAudio(path: string) { decodeCache.delete(vfs.norm(path)); }
 
-type Snd = { _buf: AudioBuffer | null; _vol: number; _pitch: number; _src: AudioBufferSourceNode | null; _gain: GainNode | null; _pend: boolean; frameCount: number; stream: any };
+type Snd = { _buf: AudioBuffer | null; _vol: number; _pitch: number; _pan: number; _src: AudioBufferSourceNode | null; _gain: GainNode | null; _pend: boolean; frameCount: number; stream: any };
 export function LoadSound(path: string): Snd {
-  const s: Snd = { _buf: null, _vol: 1, _pitch: 1, _src: null, _gain: null, _pend: false, frameCount: 1, stream: {} };
+  const s: Snd = { _buf: null, _vol: 1, _pitch: 1, _pan: 0.5, _src: null, _gain: null, _pend: false, frameCount: 1, stream: {} };
   decodePath(path).then((b) => { s._buf = b; if (b) s.frameCount = b.length; if (s._pend && b) { s._pend = false; PlaySound(s); } });
   return s;
 }
@@ -924,7 +931,9 @@ export function PlaySound(s: Snd) {
   const a = ctx();
   try { s._src?.stop(); } catch {}
   const src = a.createBufferSource(); src.buffer = s._buf; src.playbackRate.value = s._pitch;
-  const g = a.createGain(); g.gain.value = s._vol; src.connect(g).connect(master!);
+  const g = a.createGain(); g.gain.value = s._vol;
+  const pan = a.createStereoPanner(); pan.pan.value = (0.5 - s._pan) * 2;
+  src.connect(g).connect(pan).connect(master!);
   src.start(); s._src = src; s._gain = g;
   src.onended = () => { if (s._src === src) s._src = null; };
 }
@@ -932,6 +941,7 @@ export function StopSound(s: Snd) { try { s._src?.stop(); } catch {} s._src = nu
 export function IsSoundPlaying(s: Snd) { return !!s && !!s._src; }
 export function SetSoundVolume(s: Snd, v: number) { if (!s) return; s._vol = v; if (s._gain) s._gain.gain.value = v; }
 export function SetSoundPitch(s: Snd, p: number) { if (s) s._pitch = p; }
+export function SetSoundPan(s: Snd, p: number) { if (s) s._pan = p; }
 export function UnloadSound(s: Snd) { StopSound(s); }
 export function IsSoundReady(s: Snd) { return !!s; }
 
