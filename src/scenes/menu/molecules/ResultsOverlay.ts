@@ -31,6 +31,7 @@ import { GameScene } from "../../game";
 import { toastManager } from "../../../utils/toastManager";
 import * as fs from "fs";
 import { getLocalScoresPath } from "../../../utils/storage/localScores";
+import { ConfigManager } from "../../../utils/configManager";
 import { exec } from "child_process";
 import * as path from "path";
 
@@ -615,7 +616,7 @@ export class ResultsOverlay {
     let rowY = belowY + bigFontSize + 36;
 
     let rank = "";
-    if (Math.abs(accuracyPct - 100) < 1e-6) rank = "SS";
+    if (Math.abs(accuracyPct - 100) < 1e-6) rank = ConfigManager.get().gameShowFcGrade === 0 ? "SS" : "FC";
     else if (accuracyPct >= 98) rank = "S";
     else if (accuracyPct >= 95) rank = "A";
     else if (accuracyPct >= 90) rank = "B";

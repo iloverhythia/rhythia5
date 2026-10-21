@@ -15,6 +15,7 @@ export class GameUI {
   private combo: number = 0;
   private hits: number = 0;
   private misses: number = 0;
+  private pauses: number = 0;
   private lastHits: number = 0;
   private comboScaleAnimation: number = 1.0;
   private animationTime: number = 0;
@@ -45,7 +46,8 @@ export class GameUI {
     return (score / 1000000000000000).toFixed(1) + "quad";
   }
 
-  public updateStats(hits: number, misses: number, combo?: number): void {
+  public updateStats(hits: number, misses: number, combo?: number, pauses = 0): void {
+    this.pauses = pauses;
     if (hits > this.lastHits) {
       this.comboScaleAnimation = 1.06; 
       this.animationTime = 0;
@@ -86,7 +88,8 @@ export class GameUI {
     cameraTiltY: number = 0,
     settings?: Partial<GameSettings>,
     health?: number,
-    maxHealth?: number
+    maxHealth?: number,
+    canSkip = false
   ): void {
     if (maxHealth !== undefined) {
       this.maxHealth = maxHealth;
@@ -127,6 +130,7 @@ export class GameUI {
       combo: this.combo,
       hits: this.hits,
       misses: this.misses,
+      pauses: this.pauses,
       comboScaleAnimation: this.comboScaleAnimation,
     });
 
@@ -152,6 +156,7 @@ export class GameUI {
       decorationContext: context,
       mapData,
       currentTime,
+      canSkip,
     });
 
     this.healthPanel.render({

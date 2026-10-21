@@ -49,6 +49,7 @@ export interface GameStats {
   accuracy: number;
   score: number;
   maxCombo: number;
+  pauses: number;
 }
 
 
@@ -76,6 +77,7 @@ export class GameLogic {
 
   private score: number = 0;
   private maxCombo: number = 0;
+  private pauses: number = 0;
 
   private enableIntroDelay: boolean = false;
   private pendingSceneReturn: boolean = false;
@@ -160,6 +162,7 @@ export class GameLogic {
     this.performanceTracker.resetCurrentNoteIndex();
     this.score = 0;
     this.maxCombo = 0;
+    this.pauses = 0;
   }
 
   private resetEndFlags(): void {
@@ -716,6 +719,7 @@ export class GameLogic {
       accuracy,
       score: this.score,
       maxCombo: this.maxCombo,
+      pauses: this.pauses,
     };
   }
 
@@ -767,6 +771,7 @@ export class GameLogic {
 
   public pauseGame(): void {
     if (this.pauseStartTime !== null) return;
+    this.pauses++;
 
     const currentPitch =
       this.resumePitchTarget ?? getMusicPitch() ?? this.defaultPitch;
