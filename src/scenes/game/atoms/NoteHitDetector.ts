@@ -1,6 +1,6 @@
 import { Vector2 } from "raylib";
 import { Rhythia } from "../../../atoms/Rhythia";
-import { playFx } from "../../../utils/soundManager";
+import { playSoundEffect } from "../../../utils/soundManager";
 import { ModeManager } from "../modes";
 
 export interface NoteHitResult {
@@ -138,7 +138,7 @@ export class NoteHitDetector {
   public checkAndPlayScheduledSounds(currentTime: number): void {
     for (const [noteIndex, noteTime] of this.scheduledHitSounds.entries()) {
       if (currentTime >= noteTime) {
-        playFx("/hit.wav");
+        playSoundEffect("hit");
         this.scheduledHitSounds.delete(noteIndex);
       }
     }

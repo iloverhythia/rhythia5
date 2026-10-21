@@ -11,6 +11,7 @@ import { getLocalScores } from "../../../../utils/storage/localScores";
 import type { LocalScoreEntry } from "../../../../utils/storage/localScores";
 import type { FinalResultsPayload } from "../../../../utils/results";
 import { ModeManager } from "../../../game/modes";
+import { ConfigManager } from "../../../../utils/configManager";
 
 interface Score {
   id: number;
@@ -565,7 +566,9 @@ export class Leaderboard {
         a: alpha,
       });
 
-      const username = score.username || "Unknown";
+      const username = ConfigManager.getExtra("streamer.hideUsernames", false)
+        ? "Player"
+        : score.username || "Unknown";
       const avatarSize = 32;
       const avatarX = rankX + 34;
       if (score.avatar_url) {
