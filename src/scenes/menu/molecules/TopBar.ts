@@ -61,11 +61,9 @@ const ICON_SIZE = 30;
 const ICON_SPACING = 56;
 const TAB_HEIGHT = 40;
 const SEARCH_WIDTH = 200;
-const PEOPLE_SIZE = 56;
 
 export class TopBar {
   private gameObject: GameObject;
-  private peopleObject: GameObject;
   private readonly barHeight: number = 70;
   private profileData: ProfileData | null = null;
   private accentColor: AccentColor | null = null;
@@ -75,7 +73,6 @@ export class TopBar {
   private activeTab: string = ConfigManager.get().selectedTab || "Downloaded";
   private toggleState: boolean =
     ConfigManager.get().alternativeViewMode || false;
-  private peopleHover: number = 0;
   private profileStatus: "loading" | "ready" | "unauthenticated" | "error" =
     "loading";
   private topMenu!: TopContextMenu;
@@ -102,7 +99,6 @@ export class TopBar {
 
   constructor() {
     this.gameObject = new GameObject({ zBase: 4 });
-    this.peopleObject = new GameObject({ zBase: 4 });
     this.initialize();
     this.loadProfile();
   }
@@ -131,7 +127,6 @@ export class TopBar {
       onOpenGameFolder: () => this.onOpenGameFolder(),
       onExitGame: () => this.onExitGame(),
     });
-    this.topMenu.setBarHeight(this.barHeight);
 
     this.iconButtons = [
       button({
@@ -154,9 +149,8 @@ export class TopBar {
       }),
       button({
         icon: "/icons/list.png",
-        tooltip: "Menu",
-        onClick: () => this.topMenu.handleTopBarClick(Vector2(this.topMenuX(), 1)),
-        isActive: () => this.isMenuOpen(),
+        tooltip: "Leaderboard",
+        onClick: () => this.onLeaderboardsClick(),
       }),
       button({
         icon: "/icons/sort-ascending-letters.png",
@@ -204,19 +198,6 @@ export class TopBar {
     this.gameObject.onUpdate = () => this.updateHover();
     this.gameObject.rectArea!.onClick = () => this.handleClick();
 
-    const peopleRect = this.getPeopleRect();
-    this.peopleObject.attachRect({
-      pos: { x: peopleRect.x, y: peopleRect.y },
-      size: { x: PEOPLE_SIZE, y: PEOPLE_SIZE },
-    });
-    this.peopleObject.onDraw = () => this.drawPeopleButton();
-    this.peopleObject.rectArea!.onClick = () => {
-      if (this.isBlocked()) return true;
-      this.onLeaderboardsClick();
-      playFx("/hover.wav");
-      return true;
-    };
-
     loginWithDiscord(true).then(() => {
       this.loadProfile();
     });
@@ -237,18 +218,6 @@ export class TopBar {
       icon.width = ICON_SIZE;
       x += ICON_SPACING;
     }
-    this.topMenu.setButtonX(this.topMenuX());
-  }
-
-  private topMenuX(): number {
-    return this.iconButtons[3].x;
-  }
-
-  private getPeopleRect(): { x: number; y: number } {
-    return {
-      x: Rhythia.gameWidth - PEOPLE_SIZE - 40,
-      y: Rhythia.gameHeight - PEOPLE_SIZE - 30,
-    };
   }
 
   private async loadProfile(): Promise<void> {
@@ -291,12 +260,6 @@ export class TopBar {
       );
       button.hover = lerpDelta(button.hover, hovered ? 1 : 0, 0.2);
     }
-    const people = this.getPeopleRect();
-    const peopleHovered = !!(
-      mousePos &&
-      inRect(mousePos.x, mousePos.y, people.x, people.y, PEOPLE_SIZE, PEOPLE_SIZE)
-    );
-    this.peopleHover = lerpDelta(this.peopleHover, peopleHovered ? 1 : 0, 0.2);
   }
 
   private handleClick(): boolean {
@@ -358,8 +321,9 @@ export class TopBar {
     const avatarX = MARGIN_X + 12;
     const avatarY = (this.barHeight - avatarSize) / 2;
     const hasProfile = this.profileStatus === "ready";
+    const hidden = ConfigManager.getExtra("streamer.hideProfile", false);
     const avatarUrl =
-      this.profileData?.avatar_url || this.profileData?.profile_image;
+      !hidden && (this.profileData?.avatar_url || this.profileData?.profile_image);
 
     if (hasProfile && avatarUrl) {
       drawSprite(
@@ -380,7 +344,7 @@ export class TopBar {
     const textX = avatarX + avatarSize + 10;
     const name =
       this.profileStatus === "ready"
-        ? this.profileData?.username || "Player"
+        ? (!hidden && this.profileData?.username) || "Player"
         : this.profileStatus === "loading"
         ? "Loading..."
         : "Log in";
@@ -484,26 +448,6 @@ export class TopBar {
     }
   }
 
-  private drawPeopleButton(): void {
-    const { x, y } = this.getPeopleRect();
-    const shade = 28 + 20 * this.peopleHover;
-    drawRect(x, y, PEOPLE_SIZE, PEOPLE_SIZE, {
-      r: shade,
-      g: shade,
-      b: shade,
-      a: 230,
-    });
-    drawSprite(
-      "/icons/users.png",
-      Vector2(x + 12, y + 12),
-      Vector2(PEOPLE_SIZE - 24, PEOPLE_SIZE - 24),
-      { r: 255, g: 255, b: 255, a: 255 }
-    );
-    if (this.peopleHover > 0.5) {
-      this.drawTooltip("Leaderboards", x + PEOPLE_SIZE / 2, y);
-    }
-  }
-
   private drawTooltip(label: string, centerX: number, elementTop: number): void {
     const fontSize = 18;
     const padX = 8;
@@ -556,6 +500,10 @@ export class TopBar {
 
   public isMenuOpen(): boolean {
     return this.topMenu.isOpenOrAnimating();
+  }
+
+  public openContextMenu(pos: Vector2): void {
+    this.topMenu.openAt(pos);
   }
 
   private createSearchInput(): void {

@@ -91,6 +91,10 @@ export function hasAnyLocalScores(mapId: string): boolean {
   return list.length > 0;
 }
 
+export function getPlayedMapIds(): Set<string> {
+  return new Set(Object.keys(loadDB()));
+}
+
 export function getLocalScoresPath(): string {
   return LOCAL_SCORES_PATH;
 }

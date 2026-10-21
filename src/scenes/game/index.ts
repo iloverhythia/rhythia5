@@ -56,6 +56,7 @@ import {
   setMasterVolume,
   stopMusic,
   playFx,
+  playSoundEffect,
 } from "../../utils/soundManager";
 import { CustomizationDrawer } from "../customization/molecules/CustomizationDrawer";
 import { ItemCustomizationDrawer } from "../customization/molecules/ItemCustomizationDrawer";
@@ -476,7 +477,7 @@ export class GameScene extends Scene {
     this.exitCooldown.draw();
     this.quickRestart.draw();
 
-    this.drawModeOverlay();
+    if ((settings.hudModeIndicator ?? 1) > 0) this.drawModeOverlay();
     toastManager.draw();
     this.pauseOverlay.draw();
     if (this.replayPlayer) {
@@ -692,7 +693,7 @@ export class GameScene extends Scene {
     const mapData = this.gameLogic.getMapData();
     if (!mapData?.notes) return;
     try {
-      playFx("/restart.wav");
+      playSoundEffect("retry");
     } catch {}
     this.quickRestart.start();
   }

@@ -8,7 +8,6 @@ import {
   rlScalef,
   DrawRing,
 } from "raylib";
-import { drawSprite } from "../../../utils/sprite";
 import { drawText } from "../../../utils/text";
 import { Rhythia } from "../../../atoms/Rhythia";
 import { GameUIPanel, GameUIPanelCommonArgs } from "./GameUIPanel";
@@ -62,12 +61,9 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
     rlRotatef(-10, 0, 1, 0);
     
     rlScalef(uiScale, uiScale, 1.0);
-    drawSprite(
-      "/solid.png",
-      Vector2(-planeWidth / 2, -planeHeight / 2),
-      Vector2(planeWidth, planeHeight),
-      { r: 0, g: 0, b: 0, a: Math.round(255 * uiOpacity * 3) }
-    );
+    if ((args.settings?.hudLeftBackground ?? 1) > 0) {
+      this.drawBackground(planeWidth, planeHeight, uiOpacity);
+    }
 
     const startY = -100;
     const textOpacity = Math.round(255 * (uiOpacity * 5));
@@ -78,50 +74,56 @@ export class LeftGameUIPanel extends GameUIPanel<LeftPanelArgs> {
     const arcCenterX = 0;
     const arcCenterY = startY + 40;
 
-    rlPushMatrix();
-    rlTranslatef(arcCenterX, arcCenterY, 0);
-    rlScalef(args.comboScaleAnimation, args.comboScaleAnimation, 1.0);
+    if ((args.settings?.hudCombo ?? 1) > 0) {
+      rlPushMatrix();
+      rlTranslatef(arcCenterX, arcCenterY, 0);
+      rlScalef(args.comboScaleAnimation, args.comboScaleAnimation, 1.0);
 
-    this.drawComboArc(0, 0, args.combo, textOpacity, comboInfo);
+      this.drawComboArc(0, 0, args.combo, textOpacity, comboInfo);
 
-    drawText(
-      `COMBO`,
-      Vector2(0, -70),
-      18,
-      { r: 180, g: 180, b: 180, a: textOpacity },
-      "center"
-    );
+      drawText(
+        `COMBO`,
+        Vector2(0, -70),
+        18,
+        { r: 180, g: 180, b: 180, a: textOpacity },
+        "center"
+      );
 
-    drawText(`${args.combo}x`, Vector2(0, 55), 36, comboColor, "center");
+      drawText(`${args.combo}x`, Vector2(0, 55), 36, comboColor, "center");
 
-    rlPopMatrix();
+      rlPopMatrix();
+    }
 
     const total = args.hits + args.misses;
     const accuracy = total > 0 ? (args.hits / total) * 100 : 100;
     const accuracyY = arcCenterY + 120;
 
-    drawText(
-      `ACCURACY`,
-      Vector2(0, accuracyY),
-      18,
-      { r: 180, g: 180, b: 180, a: textOpacity },
-      "center"
-    );
-    drawText(
-      `${accuracy.toFixed(2)}%`,
-      Vector2(0, accuracyY + 20),
-      32,
-      { r: 255, g: 255, b: 255, a: textOpacity },
-      "center"
-    );
+    if ((args.settings?.hudAccuracy ?? 1) > 0) {
+      drawText(
+        `ACCURACY`,
+        Vector2(0, accuracyY),
+        18,
+        { r: 180, g: 180, b: 180, a: textOpacity },
+        "center"
+      );
+      drawText(
+        `${accuracy.toFixed(2)}%`,
+        Vector2(0, accuracyY + 20),
+        32,
+        { r: 255, g: 255, b: 255, a: textOpacity },
+        "center"
+      );
+    }
 
-    drawText(
-      `MISSES: ${args.misses}`,
-      Vector2(0, accuracyY + 65),
-      20,
-      { r: 200, g: 100, b: 100, a: textOpacity },
-      "center"
-    );
+    if ((args.settings?.hudMisses ?? 1) > 0) {
+      drawText(
+        `MISSES: ${args.misses}`,
+        Vector2(0, accuracyY + 65),
+        20,
+        { r: 200, g: 100, b: 100, a: textOpacity },
+        "center"
+      );
+    }
 
     
     args.decorations.forEach((decoration) => {

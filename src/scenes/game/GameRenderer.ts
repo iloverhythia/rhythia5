@@ -6,6 +6,9 @@ import {
   rlPopMatrix,
   rlTranslatef,
   rlScalef,
+  rlRotatef,
+  DrawRectangleGradientV,
+  DrawRectangleGradientH,
   ClearBackground,
   GetFrameTime,
   GetScreenWidth,
@@ -29,7 +32,8 @@ import { Rhythia } from "../../atoms/Rhythia";
 import { lerpDelta, clamp } from "../../utils/lerp";
 import { UIDecoration } from "./panel-decorations/UIDecoration";
 import { ModeManager } from "./modes";
-import { SpriteNoteRenderer } from "./noteRenderers/spriteNoteRenderer";
+import { SkinNoteRenderer } from "./noteRenderers/noteSkins";
+import { selectedBorderSkin } from "./borderSkins";
 
 export interface RenderContext {
   gameState: GameState;
@@ -112,7 +116,7 @@ export class GameRenderer {
       spaceRainbowOffset: 200,
     });
 
-    const defaultNoteRenderer = new SpriteNoteRenderer({
+    const defaultNoteRenderer = new SkinNoteRenderer({
       squareScale: 1.0,
       noteMaxOpacity: 1.0,
     });
@@ -145,7 +149,12 @@ export class GameRenderer {
 
     const rayOpacity = settings.rayOpacity ?? 1.0;
     const chevronOpacity = settings.chevronOpacity ?? 0.8;
-    if (backgroundOpacity === 0 && rayOpacity === 0 && chevronOpacity === 0)
+    if (
+      backgroundOpacity === 0 &&
+      rayOpacity === 0 &&
+      chevronOpacity === 0 &&
+      !settings.coverOpacity
+    )
       return;
 
     const approachDistance = settings.approachDistance ?? 20;
@@ -212,6 +221,13 @@ export class GameRenderer {
       gameCenterX,
       gameCenterY
     );
+    const fov = Math.min(settings.cameraFov ?? 74, 179);
+    rlScalef(1, 1, Math.tan((fov * Math.PI) / 360) / Math.tan((74 * Math.PI) / 360));
+    if ((settings.spinCamera ?? 0) > 0) {
+      rlTranslatef(gameCenterX, gameCenterY, 0);
+      rlRotatef(gameState.currentMsTime * 0.012, 0, 0, 1);
+      rlTranslatef(-gameCenterX, -gameCenterY, 0);
+    }
 
     this.renderBorder(gameState, settings, gameCenterX, gameCenterY);
     this.updateRendererConfigs(settings);
@@ -269,6 +285,22 @@ export class GameRenderer {
     const modeForUi = ModeManager.getMode();
     modeForUi.renderExtras?.("uiOverlay", context, this, gameLogic);
     rlPopMatrix();
+
+    const danger = gameState.healthEnded
+      ? 1
+      : clamp(1 - (2 * context.health) / context.maxHealth, 0, 1);
+    const vignetteAlpha = Math.round(255 * danger * (settings.failVignetteOpacity ?? 0.5));
+    if (vignetteAlpha > 0 && gameState.isStandaloneGame) {
+      const red = { r: 200, g: 0, b: 0, a: vignetteAlpha };
+      const clear = { ...red, a: 0 };
+      const edge = 280;
+      const width = Rhythia.gameWidth;
+      const height = Rhythia.gameHeight;
+      DrawRectangleGradientV(0, 0, width, edge, red, clear);
+      DrawRectangleGradientV(0, height - edge, width, edge, clear, red);
+      DrawRectangleGradientH(0, 0, edge, height, red, clear);
+      DrawRectangleGradientH(width - edge, 0, edge, height, clear, red);
+    }
 
     return cursorPos;
   }
@@ -339,19 +371,19 @@ export class GameRenderer {
     rlPushMatrix();
     const borderSize = 320 * 1.0;
     const borderOffset = borderSize / 2;
-    rlTranslatef(gameCenterX - borderOffset, gameCenterY - borderOffset, 0);
-
-    drawSprite(
-      "/border.png",
-      Vector3(0, 0, 0),
-      Vector2(borderSize, borderSize),
-      {
-        r: Math.round(borderColor.r),
-        g: Math.round(borderColor.g),
-        b: Math.round(borderColor.b),
-        a: Math.round(255 * borderOpacity),
-      }
+    const gridParallax = (settings.gridParallax ?? 1) * 100;
+    rlTranslatef(
+      gameCenterX - borderOffset - (this.lastCursorPos.x / Rhythia.gameWidth - 0.5) * gridParallax,
+      gameCenterY - borderOffset - (this.lastCursorPos.y / Rhythia.gameHeight - 0.5) * gridParallax,
+      0
     );
+
+    selectedBorderSkin().draw(0, 0, borderSize, {
+      r: Math.round(borderColor.r),
+      g: Math.round(borderColor.g),
+      b: Math.round(borderColor.b),
+      a: Math.round(255 * borderOpacity),
+    });
 
     rlPopMatrix();
   }
@@ -445,6 +477,10 @@ export class GameRenderer {
     this.cursorRenderer.updateConfig({
       cursorScale: settings.cursorScale ?? 1.0,
       cursorOpacity: settings.cursorOpacity ?? 1.0,
+      cursorColorRed: settings.cursorColorRed ?? 255,
+      cursorColorGreen: settings.cursorColorGreen ?? 255,
+      cursorColorBlue: settings.cursorColorBlue ?? 255,
+      cursorTrailEnabled: settings.cursorTrailEnabled ?? 1,
       fadeRate: settings.cursorTrailFadeRate ?? 0.5,
       mouseBoundRate: settings.mouseBoundRate ?? 1.0,
       mouseSensitivity: settings.mouseSensitivity ?? 1.0,
@@ -462,7 +498,7 @@ export class GameRenderer {
 
       customCursorEnabled: settings.customCursorEnabled ?? 0.0,
       customCursorOpacity: settings.customCursorOpacity ?? 1.0,
-      customCursorRotationSpeed: settings.customCursorRotationSpeed ?? 180.0,
+      customCursorRotationSpeed: (settings.cursorRotation ?? 0) * 72,
       customCursorTrailEnabled: settings.customCursorTrailEnabled ?? 0.0,
 
       spaceCursorEnabled: settings.spaceCursorEnabled ?? 0.0,
@@ -477,6 +513,7 @@ export class GameRenderer {
     this.noteRenderer.updateConfig({
       squareScale: settings.squareScale ?? 1.0,
       noteMaxOpacity: settings.noteMaxOpacity ?? 1.0,
+      halfGhost: (settings.halfGhost ?? 0) > 0,
     });
   }
 
@@ -669,8 +706,7 @@ export class GameRenderer {
     const noteX = Rhythia.gameWidth / 2 + (note[1] - 1) * 100;
     const noteY = Rhythia.gameHeight / 2 + (note[2] - 1) * 100;
     this.missParticleSystem.spawnMissParticle(noteX, noteY);
-    
-    this.triggerShake(6, 120);
+    this.triggerShake(6 * (this.currentContext?.settings.missParticleOpacity ?? 1), 120);
   }
 
   private updateAndRenderParticles(settings: Partial<GameSettings>): void {
@@ -689,7 +725,8 @@ export class GameRenderer {
   }
 
   private updateAndRenderMissParticles(settings: Partial<GameSettings>): void {
-    const missOpacity = settings.missParticleOpacity ?? 0.8;
+    const missOpacity =
+      (settings.missParticleOpacity ?? 0.8) * (settings.missParticleEnabled ?? 1);
     if (missOpacity) {
       const deltaTimeMs = GetFrameTime() * 1000;
       this.missParticleSystem.update(deltaTimeMs);
@@ -721,7 +758,7 @@ export class GameRenderer {
       context.maxHealth
     );
 
-    if (gameState.canSkip && gameState.isStandaloneGame) {
+    if (gameState.canSkip && gameState.isStandaloneGame && (settings.hudSkipPrompt ?? 1) > 0) {
       this.renderSkipPrompt();
     }
   }

@@ -15,6 +15,7 @@ import {
   setMusicPitch,
   getMusicPitch,
   playFx,
+  playSoundEffect,
 } from "../../utils/soundManager";
 import { logger } from "../../utils/logger";
 import { Rhythia } from "../../atoms/Rhythia";
@@ -242,7 +243,7 @@ export class GameLogic {
     this.updateAdjustedTime(settings);
 
     this.checkMusicEnd();
-    this.checkHealthEnd();
+    this.checkHealthEnd(settings);
     this.checkFailReturnDelay();
 
     this.checkScheduledHitSounds();
@@ -405,7 +406,7 @@ export class GameLogic {
     }
   }
 
-  private checkHealthEnd(): void {
+  private checkHealthEnd(settings?: Partial<GameSettings>): void {
     if (this.previewMode) return;
     if (this.state.healthEnded || this.state.musicEnded) return;
 
@@ -415,13 +416,14 @@ export class GameLogic {
         this.state.healthEnded = true;
         this.failTriggeredAt = Date.now();
         try {
-          playFx("/fail.ogg");
+          playSoundEffect("fail");
         } catch {}
         logger(
           `Game ended due to low health (${this.healthModel.getCurrentHealth()}). Triggering slow-stop.`
         );
 
-        this.startFailSlowStop();
+        if ((settings?.deathSlowdown ?? 1) > 0) this.startFailSlowStop();
+        else this.stopMusicSafely();
 
         if (
           this.state.isStandaloneGame &&
@@ -665,6 +667,7 @@ export class GameLogic {
     }
 
     if (result.newlyMissed) {
+      if (!this.previewMode) playSoundEffect("miss");
       if (!this.replayPlayback) this.healthModel.onNoteMiss();
       try {
         this.replayObserver?.recordNoteMiss?.(

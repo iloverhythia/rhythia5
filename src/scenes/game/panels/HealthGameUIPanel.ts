@@ -17,6 +17,7 @@ export interface HealthPanelArgs extends GameUIPanelCommonArgs {
 
 export class HealthGameUIPanel extends GameUIPanel<HealthPanelArgs> {
   public render(args: HealthPanelArgs): void {
+    if ((args.settings?.hudHealthBar ?? 1) <= 0) return;
     rlPushMatrix();
 
     const playfieldScale = args.settings?.playfieldScale ?? 1.0;
