@@ -164,12 +164,7 @@ export class TrailEffect implements CursorEffect {
       const rainbowRate = config.rainbowRate ?? 0;
       const rainbowOffset = config.rainbowOffset ?? 0;
       const rainbowEnabled = (config.cursorRainbowEnabled ?? 1) >= 0.5;
-      let color = {
-        r: config.cursorColorRed ?? 255,
-        g: config.cursorColorGreen ?? 255,
-        b: config.cursorColorBlue ?? 255,
-        a: Math.round(255 * opacity),
-      };
+      let color = { ...config.cursorTint!, a: Math.round(255 * opacity) };
 
       if (rainbowEnabled && rainbowRate > 0) {
         const hue = (point1.age * rainbowRate * 360 + rainbowOffset) % 360;

@@ -4,18 +4,41 @@ import {
   registerCustomization,
   type GameSettingDefinition,
 } from "../../../utils/settingsRegistry";
+import { ConfigManager } from "../../../utils/configManager";
+import { clamp } from "../../../utils/lerp";
 import { CursorEffect, CursorEffectContext } from "./CursorEffect";
-import { CursorRendererConfig } from "./types";
 
-interface ImageTrailParticle {
-  position: Vector2;
-  age: number;
+type RGB = { r: number; g: number; b: number };
+export type TrailGradientPoint = [number, RGB];
+
+interface TrailParticle {
+  position: Vector2 | null;
+  t: number;
   angle: number;
-  scale: number;
-  texturePath: string;
+  color: RGB;
+  alpha: number;
 }
 
-const EPSILON = 0.0001;
+export const DEFAULT_TRAIL_GRADIENT: TrailGradientPoint[] = [
+  [0, { r: 255, g: 255, b: 255 }],
+  [1, { r: 195, g: 166, b: 204 }],
+];
+
+export const trailGradient = (): TrailGradientPoint[] =>
+  ConfigManager.getExtra("trailGradient", DEFAULT_TRAIL_GRADIENT);
+
+export function sampleTrailGradient(points: TrailGradientPoint[], x: number): RGB {
+  const i = points.findIndex(([at]) => at >= x);
+  if (i <= 0) return points[i < 0 ? points.length - 1 : 0][1];
+  const [start, from] = points[i - 1];
+  const [end, to] = points[i];
+  const t = (x - start) / (end - start || 1);
+  return {
+    r: Math.round(from.r + (to.r - from.r) * t),
+    g: Math.round(from.g + (to.g - from.g) * t),
+    b: Math.round(from.b + (to.b - from.b) * t),
+  };
+}
 
 registerCustomization(
   "CustomCursorTrailEffect",
@@ -71,131 +94,85 @@ registerCustomization(
 );
 
 export class CustomCursorTrailEffect implements CursorEffect {
-  private particles: ImageTrailParticle[] = [];
-  private spawnTimer = 0;
-  private lastTexturePath: string | null = null;
+  private particles: TrailParticle[] = [];
+  private previous: Vector2 | null = null;
+  private smart = false;
 
   update(context: CursorEffectContext): void {
-    const config = context.config;
-    const enabled = (config.customCursorTrailEnabled ?? 0) >= 0.5;
-    const texturePath = config.customCursorTexturePath;
-    const fadeRate = config.fadeRate ?? 0.5;
+    const { config, cursorPosition, deltaTime } = context;
+    const smart = (config.smartTrail ?? 0) >= 0.5;
+    if ((config.customCursorTrailEnabled ?? 0) < 0.5 || smart !== this.smart) {
+      this.particles = [];
+      this.previous = null;
+      this.smart = smart;
+      if ((config.customCursorTrailEnabled ?? 0) < 0.5) return;
+    }
 
-    if (!enabled || !texturePath || fadeRate > 30) {
-      this.clearParticles();
-      if (!texturePath) {
-        this.lastTexturePath = null;
+    const detail = Math.max(2, Math.round(config.trailDetail ?? 10));
+    const step = deltaTime / Math.max(config.trailTime ?? 0.15, 0.001);
+    const spawn = (position: Vector2, t: number): TrailParticle => ({
+      position,
+      t,
+      angle: config.customCursorCurrentAngle ?? 0,
+      color: config.cursorTint ?? { r: 255, g: 255, b: 255 },
+      alpha: (config.cursorOpacity ?? 1) * (config.trailOpacity ?? 1),
+    });
+
+    if (smart) {
+      this.particles.forEach((particle) => (particle.t -= step));
+      this.particles = this.particles.filter((particle) => particle.t > 0);
+      if (this.previous) {
+        const dx = this.previous.x - cursorPosition.x;
+        const dy = this.previous.y - cursorPosition.y;
+        const amount = Math.min(Math.ceil((detail * Math.hypot(dx, dy)) / 100), 120);
+        for (let i = 0; i < amount; i++) {
+          const v = i / amount;
+          this.particles.push(
+            spawn(Vector2(cursorPosition.x + dx * v, cursorPosition.y + dy * v), 1 - v * deltaTime)
+          );
+        }
       }
-      return;
+    } else {
+      if (this.particles.length !== detail) {
+        this.particles = Array.from({ length: detail }, (_, i) => ({
+          ...spawn(cursorPosition, -i / (detail - 1)),
+          position: null,
+        }));
+      }
+      this.particles.forEach((particle) => {
+        particle.t += step;
+        if (particle.t >= 1) Object.assign(particle, spawn(cursorPosition, particle.t % 1));
+      });
     }
-
-    const deltaTime = Math.max(context.deltaTime, EPSILON);
-    const createInterval = (config.trailCreateRate ?? 0.002) * 2;
-    this.spawnTimer += deltaTime;
-
-    if (texturePath !== this.lastTexturePath) {
-      this.clearParticles();
-      this.lastTexturePath = texturePath;
-    }
-
-    if (this.spawnTimer >= createInterval || this.particles.length === 0) {
-      this.spawnParticle(context, texturePath);
-      this.spawnTimer = 0;
-    }
-
-    this.updateParticles(deltaTime, config);
+    this.previous = cursorPosition;
   }
 
   render(context: CursorEffectContext): void {
-    if (this.particles.length === 0) {
-      return;
-    }
+    const { config } = context;
+    const mode = config.trailFadeMode ?? 0;
+    const gradient = (config.trailGradientEnabled ?? 0) >= 0.5 ? trailGradient() : null;
+    const texture = config.customCursorTexturePath;
 
-    const config = context.config;
-    const fadeRate = config.fadeRate ?? 0.5;
-    const maxAge = 1.0 / Math.max(fadeRate, EPSILON);
-    const cursorScale = config.cursorScale ?? 1.0;
-    const baseOpacity = config.cursorOpacity ?? 1.0;
-    const customOpacity = this.clamp(config.customCursorOpacity ?? 1.0, 0, 1);
-
-    for (let i = 0; i < this.particles.length; i++) {
-      const particle = this.particles[i];
-      const ageFactor = this.clamp(particle.age / maxAge, 0, 1);
-      const fade = 1 - ageFactor;
-      const totalScale = cursorScale * particle.scale * (0.6 + 0.4 * fade);
-      const spriteSize = 8 * totalScale;
-      const alpha = Math.round(255 * baseOpacity * customOpacity * fade);
-      if (alpha <= 0) {
-        continue;
-      }
-
+    this.particles.forEach((particle) => {
+      if (!particle.position) return;
+      const a = clamp(this.smart ? particle.t : particle.t - 0.2, 0, 1);
+      const color = gradient
+        ? sampleTrailGradient(gradient, this.smart ? 1 - particle.t : particle.t)
+        : particle.color;
+      const alpha = mode !== 1 ? a * 0.6 * (config.trailOpacity ?? 1) : particle.alpha;
+      const size = 8 * config.cursorScale * (mode !== 2 ? a : 1);
+      if (size <= 0 || alpha <= 0) return;
       drawSprite(
-        particle.texturePath,
-        Vector2(particle.position.x, particle.position.y),
-        Vector2(spriteSize, spriteSize),
-        { r: 255, g: 255, b: 255, a: alpha },
-        `${particle.texturePath}-custom-cursor-image`,
-        true,
+        texture ?? "/circle.png",
+        particle.position,
+        Vector2(size, size),
+        { ...color, a: Math.round(255 * alpha) },
+        texture ? `${texture}-custom-cursor-image` : undefined,
+        !!texture,
         true,
         particle.angle,
-        Vector2(spriteSize / 2, spriteSize / 2)
+        Vector2(size / 2, size / 2)
       );
-    }
-  }
-
-  updateConfig(config: Partial<CursorRendererConfig>): void {
-    if (
-      config.customCursorTrailEnabled !== undefined &&
-      config.customCursorTrailEnabled < 0.5
-    ) {
-      this.clearParticles();
-    }
-
-    if (config.fadeRate !== undefined && config.fadeRate > 30) {
-      this.clearParticles();
-    }
-  }
-
-  private spawnParticle(
-    context: CursorEffectContext,
-    texturePath: string
-  ): void {
-    const config = context.config;
-    const angle = config.customCursorCurrentAngle ?? 0;
-
-    this.particles.unshift({
-      position: Vector2(context.cursorPosition.x, context.cursorPosition.y),
-      age: 0,
-      angle,
-      scale: 1,
-      texturePath,
     });
-
-    const maxTrailLength = Math.max(1, (config.trailLength ?? 50) * 10);
-    if (this.particles.length > maxTrailLength) {
-      this.particles.length = maxTrailLength;
-    }
-  }
-
-  private updateParticles(deltaTime: number, config: CursorRendererConfig): void {
-    const fadeRate = config.fadeRate ?? 0.5;
-    const maxAge = 1.0 / Math.max(fadeRate, EPSILON);
-
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const particle = this.particles[i];
-      particle.age += deltaTime;
-      if (particle.age > maxAge) {
-        this.particles.splice(i, 1);
-      }
-    }
-  }
-
-  private clearParticles(): void {
-    this.particles.length = 0;
-    this.spawnTimer = 0;
-  }
-
-  private clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
   }
 }

@@ -26,6 +26,15 @@ export interface CursorRendererConfig {
   customCursorTrailEnabled?: number;
   customCursorTexturePath?: string;
   customCursorCurrentAngle?: number;
+  cursorColorMode?: number;
+  cursorFaceVelocity?: number;
+  cursorTint?: { r: number; g: number; b: number };
+  smartTrail?: number;
+  trailFadeMode?: number;
+  trailDetail?: number;
+  trailTime?: number;
+  trailOpacity?: number;
+  trailGradientEnabled?: number;
 
   spaceCursorEnabled?: number;
   spaceTrailColorHex?: string;

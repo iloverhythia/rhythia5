@@ -9,7 +9,11 @@ import {
   rlTranslatef,
   GetScreenToWorldRayEx,
   Camera3D,
+  Color,
+  ColorFromHSV,
+  GetTime,
 } from "raylib";
+import { noteColorManager } from "../../../utils/noteColorPalette";
 import * as fs from "fs";
 import * as path from "path";
 import { Rhythia } from "../../../atoms/Rhythia";
@@ -47,6 +51,7 @@ export class CursorRenderer {
   private lastCustomCursorCheck = 0;
   private readonly customCursorCacheKey = "custom-cursor-texture";
   private preparedState: PreparedCursorState | null = null;
+  private hitColor: Color | null = null;
 
   private scaleAnimation = {
     startTime: -1,
@@ -66,8 +71,9 @@ export class CursorRenderer {
     this.effects.forEach((effect) => effect.updateConfig?.(this.config));
   }
 
-  public triggerHitAnimation(currentTime: number): void {
+  public triggerHitAnimation(currentTime: number, color?: Color): void {
     this.scaleAnimation.startTime = currentTime;
+    this.hitColor = color ?? this.hitColor;
   }
 
   private getCurrentScale(currentTime: number): number {
@@ -263,8 +269,24 @@ export class CursorRenderer {
     }
 
     const cursorPosition = Vector2(cursorGameX, cursorGameY);
+    const dx = cursorGameX - this.lastCursorPosition.x;
+    const dy = cursorGameY - this.lastCursorPosition.y;
+    const moved = Math.hypot(dx, dy);
+    const facing = (Math.atan2(dx, -dy) * 180) / Math.PI;
     this.lastCursorPosition = cursorPosition;
 
+    const colorMode = this.config.cursorColorMode ?? 0;
+    const palette = noteColorManager.getCurrentPalette().colors;
+    this.config.cursorTint =
+      colorMode === 1
+        ? ColorFromHSV((GetTime() * 18) % 360, 0.65, 1)
+        : colorMode === 2
+          ? this.hitColor ?? palette[palette.length - 1]
+          : {
+              r: this.config.cursorColorRed ?? 255,
+              g: this.config.cursorColorGreen ?? 255,
+              b: this.config.cursorColorBlue ?? 255,
+            };
     this.config.customCursorTexturePath = this.customCursorPath ?? undefined;
     this.config.customCursorCurrentAngle = this.customCursorAngle;
 
@@ -285,7 +307,14 @@ export class CursorRenderer {
       1
     );
     const rotationSpeed = this.config.customCursorRotationSpeed ?? 0;
-    if (!customCursorEnabled || rotationSpeed === 0) {
+    const wrap = (angle: number) => ((((angle + 180) % 360) + 360) % 360) - 180;
+    if ((this.config.cursorFaceVelocity ?? 0) >= 0.5) {
+      if (moved > 0.1)
+        this.customCursorAngle = wrap(
+          this.customCursorAngle +
+            wrap(facing - this.customCursorAngle) * this.clamp(moved * 0.0066, 0.05, 1)
+        );
+    } else if (!customCursorEnabled || rotationSpeed === 0) {
       this.customCursorAngle = 0;
     } else {
       this.customCursorAngle =
@@ -324,11 +353,7 @@ export class CursorRenderer {
       customCursorOpacity,
     } = this.preparedState;
 
-    const tint = {
-      r: this.config.cursorColorRed ?? 255,
-      g: this.config.cursorColorGreen ?? 255,
-      b: this.config.cursorColorBlue ?? 255,
-    };
+    const tint = this.config.cursorTint!;
 
     rlPushMatrix();
     rlTranslatef(0, 0, planeZ);

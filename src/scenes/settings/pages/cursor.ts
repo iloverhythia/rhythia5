@@ -1,5 +1,29 @@
+import {
+  DrawRectangleGradientH,
+  IsMouseButtonDown,
+  IsMouseButtonPressed,
+  MOUSE_BUTTON_LEFT,
+  MOUSE_BUTTON_RIGHT,
+  Vector2,
+} from "raylib";
 import { ConfigManager } from "../../../utils/configManager";
-import { gameSettingSlider, registerSettingsPage } from "../pages";
+import { clamp } from "../../../utils/lerp";
+import { drawText } from "../../../utils/text";
+import { drawBorderRect, drawRect } from "../../../ui/draw";
+import { PANEL } from "../../menu/atoms/BaseDrawer";
+import {
+  DEFAULT_TRAIL_GRADIENT,
+  sampleTrailGradient,
+  trailGradient,
+  type TrailGradientPoint,
+} from "../../game/cursorEffects/CustomCursorTrailEffect";
+import {
+  gameSettingSlider,
+  gameSettingToggle,
+  registerSettingsPage,
+  type Rect,
+  type SettingsRow,
+} from "../pages";
 import {
   choiceRows,
   fileLabel,
@@ -18,6 +42,14 @@ const selectSkin = (file: string) => {
   ConfigManager.update({ cursorImagePath: file });
   ConfigManager.setGameSettings({ customCursorEnabled: file ? 1 : 0 });
 };
+
+const settingSelect = (key: string, label: string, labels: string[]): SettingsRow => ({
+  kind: "select",
+  label,
+  options: () => labels.map((label, i) => ({ id: String(i), label })),
+  get: () => String(gameSettingValue(key)),
+  set: (id) => ConfigManager.setGameSettings({ [key]: Number(id) }),
+});
 
 const off = {
   cursorTrailEnabled: 0,
@@ -60,6 +92,116 @@ const currentTrail = () =>
     )
   );
 
+const gradient = { selected: 0, dragging: -1 };
+const saveGradient = (points: TrailGradientPoint[]) => ConfigManager.setExtra("trailGradient", points);
+const barRect = (rect: Rect) => ({ x: rect.x + 8, y: rect.y + 34, w: rect.w - 16, h: 22 });
+const pointAt = (rect: Rect, x: number) => {
+  const bar = barRect(rect);
+  const distances = trailGradient().map(([at]) => Math.abs(bar.x + at * bar.w - x));
+  const nearest = distances.indexOf(Math.min(...distances));
+  return distances[nearest] <= 9 ? nearest : -1;
+};
+
+const gradientBar: SettingsRow = {
+  kind: "custom",
+  height: () => 84,
+  draw: (rect, mouse) => {
+    const points = trailGradient();
+    const bar = barRect(rect);
+    const x = (at: number) => Math.round(bar.x + at * bar.w);
+    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) gradient.dragging = -1;
+    else if (mouse && gradient.dragging > 0) {
+      const moved: TrailGradientPoint = [
+        clamp((mouse.x - bar.x) / bar.w, 0.001, 0.999),
+        points[gradient.dragging][1],
+      ];
+      if (moved[0] !== points[gradient.dragging][0]) {
+        const next = points
+          .map((point, i) => (i === gradient.dragging ? moved : point))
+          .sort((a, b) => a[0] - b[0]);
+        gradient.selected = gradient.dragging = next.indexOf(moved);
+        saveGradient(next);
+      }
+    }
+    if (mouse && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && mouse.y >= bar.y && mouse.y <= bar.y + bar.h + 20) {
+      const i = pointAt(rect, mouse.x);
+      if (i > 0 && i < points.length - 1) {
+        gradient.selected = i - 1;
+        saveGradient(points.filter((_, index) => index !== i));
+      }
+    }
+    drawText("click to add, drag to move, right-click to remove", Vector2(rect.x + 8, rect.y + 6), 18, PANEL.dim);
+    points.slice(1).forEach(([at, color], i) =>
+      DrawRectangleGradientH(x(points[i][0]), bar.y, x(at) - x(points[i][0]), bar.h, { ...points[i][1], a: 255 }, { ...color, a: 255 })
+    );
+    drawBorderRect(bar.x, bar.y, bar.w, bar.h, 1, PANEL.dim);
+    points.forEach(([at, color], i) => {
+      drawRect(x(at) - 6, bar.y + bar.h + 3, 12, 16, { ...color, a: 255 });
+      drawBorderRect(x(at) - 6, bar.y + bar.h + 3, 12, 16, i === gradient.selected ? 2 : 1, i === gradient.selected ? PANEL.text : PANEL.border);
+    });
+  },
+  click: (rect, mouse) => {
+    const bar = barRect(rect);
+    if (mouse.y < bar.y || mouse.y > bar.y + bar.h + 20) return false;
+    const points = trailGradient();
+    const i = pointAt(rect, mouse.x);
+    if (i >= 0) {
+      gradient.selected = i;
+      gradient.dragging = i > 0 && i < points.length - 1 ? i : -1;
+      return true;
+    }
+    const at = clamp((mouse.x - bar.x) / bar.w, 0, 1);
+    const added: TrailGradientPoint = [at, sampleTrailGradient(points, at)];
+    const next = [...points, added].sort((a, b) => a[0] - b[0]);
+    gradient.selected = gradient.dragging = next.indexOf(added);
+    saveGradient(next);
+    return true;
+  },
+};
+
+const selectedPoint = () => Math.min(gradient.selected, trailGradient().length - 1);
+
+const chromiaTrailRows = (): SettingsRow[] => [
+  gameSettingToggle("smartTrail"),
+  settingSelect("trailFadeMode", "Trail Fade Mode", ["Normal", "Scale only", "Opacity only"]),
+  gameSettingSlider("trailDetail"),
+  gameSettingSlider("trailTime"),
+  gameSettingSlider("trailOpacity", {
+    min: 0,
+    max: 100,
+    step: 5,
+    defaultValue: 100,
+    get: () => gameSettingValue("trailOpacity") * 100,
+    set: (value) => ConfigManager.setGameSettings({ trailOpacity: value / 100 }),
+    format: (value) => `${Math.round(value)}%`,
+    maxLabel: "100%",
+  }),
+  { kind: "section", label: "Trail Gradient" },
+  gameSettingToggle("trailGradientEnabled"),
+  ...(gameSettingValue("trailGradientEnabled") >= 0.5
+    ? [
+        gradientBar,
+        {
+          kind: "color",
+          label: "Point Color",
+          get: () => trailGradient()[selectedPoint()][1],
+          set: (color) =>
+            saveGradient(
+              trailGradient().map((point, i): TrailGradientPoint => (i === selectedPoint() ? [point[0], color] : point))
+            ),
+        } satisfies SettingsRow,
+        {
+          kind: "button",
+          label: "Reset gradient",
+          onClick: () => {
+            gradient.selected = 0;
+            saveGradient(DEFAULT_TRAIL_GRADIENT);
+          },
+        } satisfies SettingsRow,
+      ]
+    : []),
+];
+
 registerSettingsPage({
   id: "cursor",
   title: "Cursor",
@@ -83,6 +225,7 @@ registerSettingsPage({
       value: () => currentTrail()?.label ?? "Custom",
       half: true,
     },
+    settingSelect("cursorColorMode", "Color Mode", ["Single Color", "Rainbow", "Note Color"]),
     gameSettingColor(
       "Cursor Color",
       ["cursorColorRed", "cursorColorGreen", "cursorColorBlue"],
@@ -98,7 +241,15 @@ registerSettingsPage({
       step: 0.001,
     }),
     gameSettingSlider("cursorScale", { max: 6, step: 0.01 }),
-    gameSettingSlider("cursorRotation"),
+    gameSettingSlider("cursorRotation", {
+      label: "Cursor Spin (deg/sec)",
+      min: -3600,
+      max: 3600,
+      step: 1,
+      get: () => gameSettingValue("cursorRotation") * 72,
+      set: (value) => ConfigManager.setGameSettings({ cursorRotation: value / 72 }),
+    }),
+    gameSettingToggle("cursorFaceVelocity"),
     {
       kind: "toggle",
       label: "Cursor Mode",
@@ -152,7 +303,8 @@ registerSettingsPage({
       ConfigManager.setGameSettings(TRAILS.find((trail) => trail.id === id)!.settings)
     ),
     { kind: "section", label: "Options" },
-    gameSettingSlider("cursorTrailFadeRate"),
-    gameSettingSlider("rainbowRate"),
+    ...(currentTrail()?.id === "image"
+      ? chromiaTrailRows()
+      : [gameSettingSlider("cursorTrailFadeRate"), gameSettingSlider("rainbowRate")]),
   ],
 });
