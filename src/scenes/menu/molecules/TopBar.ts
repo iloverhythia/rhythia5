@@ -28,7 +28,10 @@ import { createInputBox, InputBox } from "../atoms/InputBox";
 import { Popup } from "../atoms/Popup";
 import { logger } from "../../../utils/logger";
 import { ConfigManager } from "../../../utils/configManager";
-import { loginWithDiscord } from "../../../utils/auth/supabase";
+import {
+  loginWithDiscord,
+  promptPasswordLogin,
+} from "../../../utils/auth/supabase";
 import { createTopContextMenu, TopContextMenu } from "./TopContextMenu";
 import { MenuScene } from "..";
 
@@ -562,12 +565,11 @@ export class TopBar {
       try {
         playFx("/hover.wav");
 
-        const user = await loginWithDiscord();
-        if (user) {
+        if (await promptPasswordLogin()) {
           await this.loadProfile();
         }
       } catch (error) {
-        console.error("Discord login failed from TopBar", error);
+        console.error("Login failed from TopBar", error);
       }
     })();
   }
@@ -730,7 +732,7 @@ export class TopBar {
     ) {
       const detailY = this.barHeight / 2 + 2;
       drawText(
-        "with Discord account",
+        "with Rhythia account",
         Vector2(textX, detailY),
         22,
         { r: 200, g: 200, b: 200, a: 255 },
