@@ -1,18 +1,7 @@
 import { Vector2 } from "raylib";
-import { listSettingsPages, registerSettingsPage, SettingsRow } from "../pages";
-import { ConfigManager } from "../../../utils/configManager";
+import { hasFlag, listSettingsPages, registerSettingsPage, SettingsRow } from "../pages";
 import { drawText } from "../../../utils/text";
 import { PANEL } from "../../menu/atoms/BaseDrawer";
-
-export type RowFlag = "settingsFavorites" | "settingsLocked";
-
-export const hasFlag = (flag: RowFlag, label: string): boolean =>
-  ConfigManager.getExtra<string[]>(flag, []).includes(label);
-
-export const toggleFlag = (flag: RowFlag, label: string): void => {
-  const list = ConfigManager.getExtra<string[]>(flag, []);
-  ConfigManager.setExtra(flag, list.includes(label) ? list.filter((l) => l !== label) : [...list, label]);
-};
 
 registerSettingsPage({
   id: "favorites",
