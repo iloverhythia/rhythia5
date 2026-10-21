@@ -5,7 +5,7 @@ import path from "path";
 const S = (f) => path.resolve("web/shims", f);
 const alias = {
   raylib: S("raylib.ts"), fs: S("fs.ts"), "fs/promises": S("fs-promises.ts"), path: path.resolve("node_modules/path-browserify/index.js"),
-  os: S("os.ts"), crypto: S("crypto.ts"), child_process: S("child_process.ts"), "timers/promises": S("timers-promises.ts"),
+  os: S("os.ts"), crypto: S("crypto.ts"), zlib: S("zlib.ts"), child_process: S("child_process.ts"), "timers/promises": S("timers-promises.ts"),
   winston: S("winston.ts"), "steamworks.js": S("steamworks.ts"), "steamworks.js/client": S("steamworks.ts"),
   "rhythia-api": S("rhythia-api.ts"), "rhythia-api/handleApi": S("rhythia-api.ts"),
   express: S("express.ts"), http: S("http.ts"), "@2toad/profanity": path.resolve("node_modules/@2toad/profanity/dist/index.js"), simplevideo: S("simplevideo.ts"), sharp: S("sharp.ts"), nativefiledialog: S("nativefiledialog.ts"),
