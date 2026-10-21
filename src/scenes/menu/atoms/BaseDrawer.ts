@@ -1,14 +1,29 @@
 import { Vector2, rlPushMatrix, rlPopMatrix, rlTranslatef } from "raylib";
 import { GameObject } from "../../../atoms/Object";
 import { drawSprite } from "../../../utils/sprite";
-import { drawText } from "../../../utils/text";
+import { drawText, measureText } from "../../../utils/text";
 import { Rhythia } from "../../../atoms/Rhythia";
 import { lerpDelta } from "../../../utils/lerp";
 import { playFx } from "../../../utils/soundManager";
 import { AccentColor } from "../../../utils/imageBlur";
-import { tintWithAccent, accentBackground } from "../../../utils/colors";
-import { drawRect, drawHLine, drawOverlay } from "../../../ui/draw";
-import { getPresentationInfo } from "../../../atoms/sysutils/rendering";
+import { drawRect, drawBorderRect, drawOverlay } from "../../../ui/draw";
+import { inRect } from "../../../utils/geometry";
+
+export const PANEL = {
+  x: 85,
+  y: 30,
+  width: 655,
+  headerHeight: 80,
+  gap: 14,
+  bottom: 30,
+  padding: 18,
+  background: { r: 14, g: 14, b: 15, a: 250 },
+  card: { r: 22, g: 22, b: 24, a: 255 },
+  cardHover: { r: 30, g: 30, b: 33, a: 255 },
+  border: { r: 44, g: 44, b: 48, a: 255 },
+  text: { r: 240, g: 240, b: 240, a: 255 },
+  dim: { r: 160, g: 160, b: 165, a: 255 },
+};
 
 export abstract class BaseDrawer {
   protected gameObject: GameObject;
@@ -21,10 +36,10 @@ export abstract class BaseDrawer {
   protected overlayOpacity: number = 0.6;
   protected backgroundOpacity: number = 1.0;
 
-  constructor(drawerWidth: number = 500) {
+  constructor(drawerWidth: number = PANEL.x + PANEL.width) {
     this.drawerWidth = drawerWidth;
-    this.gameObject = new GameObject({ zBase: 10 }); 
-    this.overlayObject = new GameObject({ zBase: 9 }); 
+    this.gameObject = new GameObject({ zBase: 10 });
+    this.overlayObject = new GameObject({ zBase: 9 });
     this.initialize();
   }
 
@@ -39,61 +54,77 @@ export abstract class BaseDrawer {
       size: { x: Rhythia.gameWidth, y: Rhythia.gameHeight },
     });
 
-    this.setupEventHandlers();
+    this.gameObject.onDraw = () => this.draw();
+    this.overlayObject.onDraw = () => this.drawOverlay();
+    this.gameObject.onUpdate = () => this.update();
+
+    this.overlayObject.rectArea!.onClick = () => {
+      if (!this.isOpen || this.animationProgress <= 0.5) return false;
+      if (this.onOverlayClick()) {
+        this.close();
+        playFx("/hover.wav");
+      }
+      return true;
+    };
+
+    this.gameObject.rectArea!.onClick = () => {
+      if (!this.isOpen || this.animationProgress <= 0.5) return false;
+      const mousePos = this.gameObject.getMousePosition();
+      const close = this.getCloseButtonRect();
+      const back = this.getBackButtonRect();
+      if (mousePos && this.shouldShowCloseButton() && inRect(mousePos.x, mousePos.y, close.x, close.y, close.w, close.h)) {
+        this.close();
+        playFx("/hover.wav");
+        return true;
+      }
+      if (mousePos && this.canGoBack() && inRect(mousePos.x, mousePos.y, back.x, back.y, back.w, back.h)) {
+        this.onBack();
+        playFx("/hover.wav");
+        return true;
+      }
+      if (mousePos && mousePos.x > this.getPanelRight()) return false;
+      return this.onDrawerClick(mousePos);
+    };
   }
 
   protected abstract drawContent(): void;
 
   protected abstract getHeaderText(): string;
 
-  private setupEventHandlers(): void {
-    this.gameObject.onDraw = () => this.draw();
+  protected getSubtitleText(): string {
+    return "";
+  }
 
-    this.overlayObject.onDraw = () => this.drawOverlay();
+  protected canGoBack(): boolean {
+    return false;
+  }
 
-    this.gameObject.onUpdate = () => this.update();
-    this.overlayObject.onUpdate = () => this.updateOverlay();
+  protected onBack(): void {}
 
-    this.overlayObject.rectArea!.onClick = () => {
-      if (this.isOpen && this.animationProgress > 0.5) {
-        const shouldClose = this.onOverlayClick();
-        if (shouldClose) {
-          this.close();
-          playFx("/hover.wav");
-        }
-        return true; 
-      }
-      return false;
-    };
+  protected getPanelRight(): number {
+    return Math.min(this.drawerWidth, PANEL.x + PANEL.width);
+  }
 
-    this.gameObject.rectArea!.onClick = () => {
-      if (this.isOpen && this.animationProgress > 0.5) {
-        const mousePos = this.gameObject.getMousePosition();
-        if (mousePos && this.shouldShowCloseButton()) {
-          const closeButtonX = this.drawerWidth - 50;
-          const closeButtonY = 15;
-          const closeButtonSize = 30;
-
-          if (
-            mousePos.x >= closeButtonX &&
-            mousePos.x <= closeButtonX + closeButtonSize &&
-            mousePos.y >= closeButtonY &&
-            mousePos.y <= closeButtonY + closeButtonSize
-          ) {
-            this.close();
-            playFx("/hover.wav");
-            return true;
-          }
-        }
-
-        return this.onDrawerClick(mousePos);
-      }
-      return false;
+  protected getContentRect(): { x: number; y: number; w: number; h: number } {
+    const y = PANEL.y + PANEL.headerHeight + PANEL.gap;
+    return {
+      x: PANEL.x,
+      y,
+      w: this.getPanelRight() - PANEL.x,
+      h: this.drawerHeight - PANEL.bottom - y,
     };
   }
 
+  protected getCloseButtonRect(): { x: number; y: number; w: number; h: number } {
+    return { x: this.getPanelRight() - 54, y: PANEL.y + 22, w: 36, h: 36 };
+  }
+
+  protected getBackButtonRect(): { x: number; y: number; w: number; h: number } {
+    return { x: this.getPanelRight() - 98, y: PANEL.y + 22, w: 36, h: 36 };
+  }
+
   protected onDrawerClick(mousePos: Vector2 | null): boolean {
-    return true; 
+    return true;
   }
 
   protected onOverlayClick(): boolean {
@@ -101,32 +132,25 @@ export abstract class BaseDrawer {
   }
 
   private update(): void {
-    if (this.isOpen) {
-      this.animationProgress = lerpDelta(this.animationProgress, 1, 0.2);
-    } else {
-      this.animationProgress = lerpDelta(this.animationProgress, 0, 0.2);
-    }
-
-    const xOffset =
-      -this.drawerWidth + this.drawerWidth * this.animationProgress;
-    this.gameObject.rectArea!.pos.x = xOffset;
-
+    this.animationProgress = lerpDelta(
+      this.animationProgress,
+      this.isOpen ? 1 : 0,
+      0.2
+    );
+    this.gameObject.rectArea!.pos.x =
+      -this.drawerWidth * (1 - this.animationProgress);
     this.onUpdate();
   }
 
   protected onUpdate(): void {}
 
-  private updateOverlay(): void {}
-
   private drawOverlay(): void {
     if (this.animationProgress <= 0.01 || this.overlayOpacity <= 0) return;
-
-    const overlayAlpha = this.overlayOpacity * this.animationProgress;
     drawOverlay({
       r: 0,
       g: 0,
       b: 0,
-      a: Math.round(overlayAlpha * 255),
+      a: Math.round(this.overlayOpacity * this.animationProgress * 255),
     });
   }
 
@@ -134,134 +158,49 @@ export abstract class BaseDrawer {
     if (this.animationProgress <= 0.01) return;
 
     rlPushMatrix();
-
-    
-    
-    try {
-      let viewportX = 0;
-      let viewportW = Rhythia.gameWidth;
-      let viewportH = Rhythia.gameHeight;
-      try {
-        const info = getPresentationInfo();
-        viewportX = Math.round(info.viewport.x);
-        viewportW = Math.max(1, Math.round(info.viewport.width));
-        viewportH = Math.max(1, Math.round(info.viewport.height));
-      } catch {}
-
-      const scaleX = viewportW / Math.max(1, Rhythia.gameWidth);
-      const worldLeftX = -viewportX / Math.max(0.0001, scaleX);
-      const gutterWidth = Math.max(0, -worldLeftX);
-      if (gutterWidth > 0) {
-        const bgBase = { r: 20, g: 20, b: 25 };
-        const bgTint = this.accentColor
-          ? accentBackground(this.accentColor, 0.15)
-          : bgBase;
-        const bg = {
-          r: bgBase.r + bgTint.r,
-          g: bgBase.g + bgTint.g,
-          b: bgBase.b + bgTint.b,
-          a: Math.round(this.backgroundOpacity * 255),
-        } as any;
-        drawRect(worldLeftX, 0, gutterWidth, this.drawerHeight, bg);
-      }
-    } catch {}
-
-    const xOffset =
-      -this.drawerWidth + this.drawerWidth * this.animationProgress;
-    rlTranslatef(xOffset, 0, 0);
-
-    this.drawBackground();
-
-    this.drawHeader();
-
-    this.drawCloseButton();
-
+    rlTranslatef(-this.drawerWidth * (1 - this.animationProgress), 0, 0);
+    this.drawPanel();
     this.drawContent();
-
     rlPopMatrix();
   }
 
-  private drawBackground(): void {
-    const shadowWidth = 20;
-    for (let i = 0; i < shadowWidth; i++) {
-      const alpha = (1 - i / shadowWidth) * 0.3 * this.animationProgress;
-      drawRect(this.drawerWidth + i, 0, 1, this.drawerHeight, {
-        r: 0,
-        g: 0,
-        b: 0,
-        a: Math.round(alpha * 255),
-      });
+  private drawPanel(): void {
+    const width = this.getPanelRight() - PANEL.x;
+    const content = this.getContentRect();
+    const alpha = Math.round(PANEL.background.a * this.backgroundOpacity);
+
+    drawRect(PANEL.x, PANEL.y, width, PANEL.headerHeight, { ...PANEL.background, a: alpha });
+    drawBorderRect(PANEL.x, PANEL.y, width, PANEL.headerHeight, 2, PANEL.border);
+    drawRect(content.x, content.y, content.w, content.h, { ...PANEL.background, a: alpha });
+    drawBorderRect(content.x, content.y, content.w, content.h, 2, PANEL.border);
+
+    const titleX = PANEL.x + PANEL.padding;
+    const parts = this.getHeaderText().split(" > ");
+    let x = titleX;
+    parts.forEach((part, index) => {
+      const last = index === parts.length - 1;
+      const label = last ? part : `${part}  >  `;
+      drawText(label, Vector2(x, PANEL.y + 12), 30, last ? PANEL.text : PANEL.dim);
+      x += measureText(label, 30).width;
+    });
+    const subtitle = this.getSubtitleText();
+    if (subtitle) {
+      drawText(subtitle, Vector2(titleX, PANEL.y + 46), 22, PANEL.dim);
     }
-
-    const bgBase = { r: 20, g: 20, b: 25 };
-    const bgTint = this.accentColor
-      ? accentBackground(this.accentColor, 0.15)
-      : bgBase;
-    const bg = {
-      r: bgBase.r + bgTint.r,
-      g: bgBase.g + bgTint.g,
-      b: bgBase.b + bgTint.b,
-      a: Math.round(this.backgroundOpacity * 255),
-    };
-
-    drawRect(0, 0, this.drawerWidth, this.drawerHeight, bg);
-
-    const borderColor = tintWithAccent(
-      { r: 80, g: 80, b: 90 },
-      this.accentColor,
-      0.3
-    );
-    drawRect(this.drawerWidth - 2, 0, 2, this.drawerHeight, borderColor);
-  }
-
-  private drawHeader(): void {
-    drawText(
-      this.getHeaderText(),
-      Vector2(40, 30),
-      42,
-      { r: 255, g: 255, b: 255, a: 255 },
-      "left"
-    );
-
-    const lineColor = tintWithAccent(
-      { r: 60, g: 60, b: 70 },
-      this.accentColor,
-      0.3
-    );
-
-    drawHLine(40, 70, this.drawerWidth - 80, lineColor, 2);
-  }
-
-  private drawCloseButton(): void {
-    if (!this.shouldShowCloseButton()) {
-      return;
-    }
-
-    const closeX = this.drawerWidth - 50;
-    const closeY = 15;
-    const closeSize = 30;
 
     const mousePos = this.gameObject.getMousePosition();
-    let isHovered = false;
-    if (mousePos) {
-      isHovered =
-        mousePos.x >= closeX &&
-        mousePos.x <= closeX + closeSize &&
-        mousePos.y >= closeY &&
-        mousePos.y <= closeY + closeSize;
-    }
-
-    const color = isHovered
-      ? { r: 255, g: 255, b: 255, a: 255 }
-      : { r: 180, g: 180, b: 180, a: 255 };
-
-    drawText(
-      "x",
-      Vector2(closeX + closeSize / 2 - 8, closeY),
-      48,
-      color,
-      "center"
-    );
+    const drawIcon = (icon: string, rect: { x: number; y: number; w: number; h: number }) => {
+      const hovered = !!mousePos && inRect(mousePos.x, mousePos.y, rect.x, rect.y, rect.w, rect.h);
+      const shade = hovered ? 255 : 210;
+      drawSprite(icon, Vector2(rect.x, rect.y), Vector2(rect.w, rect.h), {
+        r: shade,
+        g: shade,
+        b: shade,
+        a: 255,
+      });
+    };
+    if (this.shouldShowCloseButton()) drawIcon("/icons/x.png", this.getCloseButtonRect());
+    if (this.canGoBack()) drawIcon("/icons/chevron-left.png", this.getBackButtonRect());
   }
 
   protected shouldShowCloseButton(): boolean {

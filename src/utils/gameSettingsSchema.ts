@@ -24,6 +24,10 @@ import "../scenes/game/cursorEffects/SpaceCursorEffect";
 import "../scenes/game/panel-decorations/BongoCatDecoration";
 import "../scenes/game/panel-decorations/WinXpTopBarDecoration";
 import "../scenes/game/hitParticles/BurstParticleEffect";
+import "../scenes/settings/register/gameplay";
+import "../scenes/settings/register/interface";
+import "../scenes/settings/register/cursorAudio";
+import "../scenes/settings/register/skins";
 
 const PLACEHOLDER_ICON_PATH = "/customize.png" as const;
 
