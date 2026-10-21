@@ -476,7 +476,7 @@ export class GameScene extends Scene {
     this.exitCooldown.draw();
     this.quickRestart.draw();
 
-    this.drawModeOverlay();
+    if ((settings.hudModeIndicator ?? 1) > 0) this.drawModeOverlay();
     toastManager.draw();
     this.pauseOverlay.draw();
     if (this.replayPlayer) {

@@ -6,6 +6,9 @@ import {
   rlPopMatrix,
   rlTranslatef,
   rlScalef,
+  rlRotatef,
+  DrawRectangleGradientV,
+  DrawRectangleGradientH,
   ClearBackground,
   GetFrameTime,
   GetScreenWidth,
@@ -212,6 +215,13 @@ export class GameRenderer {
       gameCenterX,
       gameCenterY
     );
+    const fov = Math.min(settings.cameraFov ?? 74, 179);
+    rlScalef(1, 1, Math.tan((fov * Math.PI) / 360) / Math.tan((74 * Math.PI) / 360));
+    if ((settings.spinCamera ?? 0) > 0) {
+      rlTranslatef(gameCenterX, gameCenterY, 0);
+      rlRotatef(gameState.currentMsTime * 0.012, 0, 0, 1);
+      rlTranslatef(-gameCenterX, -gameCenterY, 0);
+    }
 
     this.renderBorder(gameState, settings, gameCenterX, gameCenterY);
     this.updateRendererConfigs(settings);
@@ -269,6 +279,22 @@ export class GameRenderer {
     const modeForUi = ModeManager.getMode();
     modeForUi.renderExtras?.("uiOverlay", context, this, gameLogic);
     rlPopMatrix();
+
+    const danger = gameState.healthEnded
+      ? 1
+      : clamp(1 - (2 * context.health) / context.maxHealth, 0, 1);
+    const vignetteAlpha = Math.round(255 * danger * (settings.failVignetteOpacity ?? 0.5));
+    if (vignetteAlpha > 0 && gameState.isStandaloneGame) {
+      const red = { r: 200, g: 0, b: 0, a: vignetteAlpha };
+      const clear = { ...red, a: 0 };
+      const edge = 280;
+      const width = Rhythia.gameWidth;
+      const height = Rhythia.gameHeight;
+      DrawRectangleGradientV(0, 0, width, edge, red, clear);
+      DrawRectangleGradientV(0, height - edge, width, edge, clear, red);
+      DrawRectangleGradientH(0, 0, edge, height, red, clear);
+      DrawRectangleGradientH(width - edge, 0, edge, height, clear, red);
+    }
 
     return cursorPos;
   }
@@ -339,7 +365,12 @@ export class GameRenderer {
     rlPushMatrix();
     const borderSize = 320 * 1.0;
     const borderOffset = borderSize / 2;
-    rlTranslatef(gameCenterX - borderOffset, gameCenterY - borderOffset, 0);
+    const gridParallax = (settings.gridParallax ?? 1) * 100;
+    rlTranslatef(
+      gameCenterX - borderOffset - (this.lastCursorPos.x / Rhythia.gameWidth - 0.5) * gridParallax,
+      gameCenterY - borderOffset - (this.lastCursorPos.y / Rhythia.gameHeight - 0.5) * gridParallax,
+      0
+    );
 
     drawSprite(
       "/border.png",
@@ -477,6 +508,7 @@ export class GameRenderer {
     this.noteRenderer.updateConfig({
       squareScale: settings.squareScale ?? 1.0,
       noteMaxOpacity: settings.noteMaxOpacity ?? 1.0,
+      halfGhost: (settings.halfGhost ?? 0) > 0,
     });
   }
 
@@ -669,8 +701,7 @@ export class GameRenderer {
     const noteX = Rhythia.gameWidth / 2 + (note[1] - 1) * 100;
     const noteY = Rhythia.gameHeight / 2 + (note[2] - 1) * 100;
     this.missParticleSystem.spawnMissParticle(noteX, noteY);
-    
-    this.triggerShake(6, 120);
+    this.triggerShake(6 * (this.currentContext?.settings.missParticleOpacity ?? 1), 120);
   }
 
   private updateAndRenderParticles(settings: Partial<GameSettings>): void {
@@ -721,7 +752,7 @@ export class GameRenderer {
       context.maxHealth
     );
 
-    if (gameState.canSkip && gameState.isStandaloneGame) {
+    if (gameState.canSkip && gameState.isStandaloneGame && (settings.hudSkipPrompt ?? 1) > 0) {
       this.renderSkipPrompt();
     }
   }

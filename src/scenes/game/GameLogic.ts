@@ -242,7 +242,7 @@ export class GameLogic {
     this.updateAdjustedTime(settings);
 
     this.checkMusicEnd();
-    this.checkHealthEnd();
+    this.checkHealthEnd(settings);
     this.checkFailReturnDelay();
 
     this.checkScheduledHitSounds();
@@ -405,7 +405,7 @@ export class GameLogic {
     }
   }
 
-  private checkHealthEnd(): void {
+  private checkHealthEnd(settings?: Partial<GameSettings>): void {
     if (this.previewMode) return;
     if (this.state.healthEnded || this.state.musicEnded) return;
 
@@ -421,7 +421,8 @@ export class GameLogic {
           `Game ended due to low health (${this.healthModel.getCurrentHealth()}). Triggering slow-stop.`
         );
 
-        this.startFailSlowStop();
+        if ((settings?.deathSlowdown ?? 1) > 0) this.startFailSlowStop();
+        else this.stopMusicSafely();
 
         if (
           this.state.isStandaloneGame &&

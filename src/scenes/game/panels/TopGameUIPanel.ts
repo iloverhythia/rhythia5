@@ -47,13 +47,15 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
     const textOpacity = Math.round(255 * (uiOpacity * 5));
 
     const mapName = args.mapData?.title || "Unknown Map";
-    drawText(
-      mapName,
-      Vector2(0, -35),
-      28,
-      { r: 255, g: 255, b: 255, a: textOpacity },
-      "center"
-    );
+    if ((args.settings?.hudMapTitle ?? 1) > 0) {
+      drawText(
+        mapName,
+        Vector2(0, -35),
+        28,
+        { r: 255, g: 255, b: 255, a: textOpacity },
+        "center"
+      );
+    }
 
     const timeInSeconds = Math.max(0, args.currentTime / 1000);
     const minutes = Math.floor(timeInSeconds / 60);
@@ -75,15 +77,17 @@ export class TopGameUIPanel extends GameUIPanel<TopPanelArgs> {
     const timeDisplay = durationString
       ? `${currentTimeString} / ${durationString}`
       : currentTimeString;
-    drawText(
-      timeDisplay,
-      Vector2(0, -10),
-      22,
-      { r: 200, g: 200, b: 200, a: textOpacity },
-      "center"
-    );
+    if ((args.settings?.hudTime ?? 1) > 0) {
+      drawText(
+        timeDisplay,
+        Vector2(0, -10),
+        22,
+        { r: 200, g: 200, b: 200, a: textOpacity },
+        "center"
+      );
+    }
 
-    if (args.mapData?.duration) {
+    if (args.mapData?.duration && (args.settings?.hudProgressBar ?? 1) > 0) {
       this.render3DProgressBar(
         0,
         20,

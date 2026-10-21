@@ -6,6 +6,7 @@ import { NoteHitResult } from "./NoteHitDetector";
 export interface NoteRenderConfig {
   squareScale: number;
   noteMaxOpacity: number;
+  halfGhost?: boolean;
 }
 
 export interface NoteRenderer {
@@ -148,6 +149,10 @@ export abstract class BaseNoteRenderer implements NoteRenderer {
     
     const maxOpacity = Math.min(1, Math.max(0, this.config.noteMaxOpacity ?? 1.0));
     alpha = Math.min(alpha, maxOpacity);
+
+    if (this.config.halfGhost) {
+      alpha *= 0.5 + 0.5 * Math.min(1, Math.max(0, (depth / approachDistance - 0.2) / 0.3));
+    }
 
     if (alpha <= 0) {
       return null;

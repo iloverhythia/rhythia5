@@ -76,7 +76,7 @@ export function initializeWindow(config: any): void {
   initializeVolumes();
   applyWindowIcon();
   SetWindowMonitor(state.targetMonitor);
-  SetTargetFPS(5000);
+  SetTargetFPS(state.maxFps);
   rlSetClipPlanes(0.01, 14000);
 }
 
