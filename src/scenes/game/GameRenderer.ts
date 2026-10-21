@@ -385,12 +385,13 @@ export class GameRenderer {
       0
     );
 
-    selectedBorderSkin().draw(0, 0, borderSize, {
-      r: Math.round(borderColor.r),
-      g: Math.round(borderColor.g),
-      b: Math.round(borderColor.b),
-      a: Math.round(255 * borderOpacity),
-    });
+    if ((settings.borderEnabled ?? 1) >= 0.5)
+      selectedBorderSkin().draw(0, 0, borderSize, {
+        r: Math.round((borderColor.r * (settings.borderColorRed ?? 255)) / 255),
+        g: Math.round((borderColor.g * (settings.borderColorGreen ?? 255)) / 255),
+        b: Math.round((borderColor.b * (settings.borderColorBlue ?? 255)) / 255),
+        a: Math.round(255 * borderOpacity * (settings.borderColorOpacity ?? 1)),
+      });
 
     rlPopMatrix();
   }
@@ -482,6 +483,7 @@ export class GameRenderer {
 
   private updateRendererConfigs(settings: Partial<GameSettings>): void {
     this.cursorRenderer.updateConfig({
+      ...settings,
       cursorScale: settings.cursorScale ?? 1.0,
       cursorOpacity: settings.cursorOpacity ?? 1.0,
       cursorColorRed: settings.cursorColorRed ?? 255,
@@ -678,8 +680,8 @@ export class GameRenderer {
     adjustedMsTime: number
   ): void {
     const noteColor = noteColorManager.getColorForNoteIndex(noteIndex);
-    this.backgroundRenderer.setAccentColor(noteColor);
-    this.cursorRenderer.triggerHitAnimation(adjustedMsTime);
+    if (!this.currentContext?.settings.disableBgEffects) this.backgroundRenderer.setAccentColor(noteColor);
+    this.cursorRenderer.triggerHitAnimation(adjustedMsTime, noteColor);
     this.borderVisualState.lastHitTime = adjustedMsTime;
     this.borderVisualState.lastHitColor = {
       r: noteColor.r,
