@@ -76,6 +76,10 @@ export abstract class BaseNoteRenderer implements NoteRenderer {
     this.config = { ...this.config, ...config };
   }
 
+  public drawPreview(position: Vector3, size: number, color: NoteRenderState["color"]): void {
+    this.drawNote({ depth: 0, alpha: 1, size, position, color });
+  }
+
   protected abstract drawNote(state: NoteRenderState): void;
 
   protected getNoteSize(): number {

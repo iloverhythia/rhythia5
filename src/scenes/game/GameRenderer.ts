@@ -29,7 +29,8 @@ import { Rhythia } from "../../atoms/Rhythia";
 import { lerpDelta, clamp } from "../../utils/lerp";
 import { UIDecoration } from "./panel-decorations/UIDecoration";
 import { ModeManager } from "./modes";
-import { SpriteNoteRenderer } from "./noteRenderers/spriteNoteRenderer";
+import { SkinNoteRenderer } from "./noteRenderers/noteSkins";
+import { selectedBorderSkin } from "./borderSkins";
 
 export interface RenderContext {
   gameState: GameState;
@@ -112,7 +113,7 @@ export class GameRenderer {
       spaceRainbowOffset: 200,
     });
 
-    const defaultNoteRenderer = new SpriteNoteRenderer({
+    const defaultNoteRenderer = new SkinNoteRenderer({
       squareScale: 1.0,
       noteMaxOpacity: 1.0,
     });
@@ -341,17 +342,12 @@ export class GameRenderer {
     const borderOffset = borderSize / 2;
     rlTranslatef(gameCenterX - borderOffset, gameCenterY - borderOffset, 0);
 
-    drawSprite(
-      "/border.png",
-      Vector3(0, 0, 0),
-      Vector2(borderSize, borderSize),
-      {
-        r: Math.round(borderColor.r),
-        g: Math.round(borderColor.g),
-        b: Math.round(borderColor.b),
-        a: Math.round(255 * borderOpacity),
-      }
-    );
+    selectedBorderSkin().draw(0, 0, borderSize, {
+      r: Math.round(borderColor.r),
+      g: Math.round(borderColor.g),
+      b: Math.round(borderColor.b),
+      a: Math.round(255 * borderOpacity),
+    });
 
     rlPopMatrix();
   }

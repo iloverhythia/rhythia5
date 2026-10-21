@@ -12,12 +12,11 @@ export class BoxNoteRenderer extends BaseNoteRenderer {
 
   protected drawNote(state: NoteRenderState): void {
     const halfSize = state.size / 2;
-    const drawX = state.position.x - halfSize;
-    const drawY = state.position.y - halfSize;
+    this.applyTransform(state.position);
 
     DrawRectangle(
-      Math.round(drawX),
-      Math.round(drawY),
+      Math.round(-halfSize),
+      Math.round(-halfSize),
       Math.round(state.size),
       Math.round(state.size),
       {
@@ -27,5 +26,7 @@ export class BoxNoteRenderer extends BaseNoteRenderer {
         a: Math.floor(state.alpha * 255),
       }
     );
+
+    this.removeTransform();
   }
 }
