@@ -58,7 +58,8 @@ import { getBeatmaps, getBeatmapPage } from "rhythia-api";
 import { BeatmapData } from "../../utils/types";
 import * as fs from "fs";
 import { SoundSpaceMemoryMap } from "../../utils/storage/ssmm";
-import { CustomizationScene } from "../customization";
+import { SettingsDrawer } from "../settings/SettingsDrawer";
+import "../settings/pages/index";
 import { logger } from "../../utils/logger";
 import { ConfigManager } from "../../utils/configManager";
 import { consumeLastResults } from "../../utils/results";
@@ -108,6 +109,7 @@ export class MenuScene extends Scene {
   private drawerFilters!: DrawerFilters;
   private profileDrawer!: ProfileDrawer;
   private leaderboardsDrawer!: LeaderboardsDrawer;
+  private settingsDrawer!: SettingsDrawer;
   private musicPlayer!: MusicPlayer;
   private blurredBackground!: BlurredBackground;
   private resultsOverlay!: ResultsOverlay;
@@ -155,6 +157,7 @@ export class MenuScene extends Scene {
     this.drawerFilters = createDrawerFilters();
     this.profileDrawer = createProfileDrawer();
     this.leaderboardsDrawer = createLeaderboardsDrawer();
+    this.settingsDrawer = new SettingsDrawer(() => this.selectedMap);
     this.musicPlayer = createMusicPlayer();
     this.musicPlayer.setOpenProfileHandler(async (userId: number) => {
       await this.openProfileById(userId);
@@ -254,6 +257,7 @@ export class MenuScene extends Scene {
       this.drawerFilters.setAccentColor(accentColor);
       this.profileDrawer.setAccentColor(accentColor);
       this.leaderboardsDrawer.setAccentColor(accentColor);
+      this.settingsDrawer.setAccentColor(accentColor);
       this.musicPlayer.setAccentColor(accentColor);
       this.masterVolumeKnob.setAccentColor(accentColor);
       this.musicVolumeKnob.setAccentColor(accentColor);
@@ -267,6 +271,7 @@ export class MenuScene extends Scene {
     this.drawerFilters.setAccentColor(initialAccentColor);
     this.profileDrawer.setAccentColor(initialAccentColor);
     this.leaderboardsDrawer.setAccentColor(initialAccentColor);
+    this.settingsDrawer.setAccentColor(initialAccentColor);
     this.musicPlayer.setAccentColor(initialAccentColor);
     this.masterVolumeKnob.setAccentColor(initialAccentColor);
     this.musicVolumeKnob.setAccentColor(initialAccentColor);
@@ -289,7 +294,7 @@ export class MenuScene extends Scene {
     };
 
     this.topBar.onCustomizeClick = () => {
-      Rhythia.goToScene(new CustomizationScene(this.selectedMap));
+      this.settingsDrawer.open();
     };
 
     this.topBar.onToggleClick = (state: boolean) => {
@@ -1549,7 +1554,8 @@ export class MenuScene extends Scene {
     const drawerOpen =
       this.drawerFilters.isDrawerOpen() ||
       this.profileDrawer.isDrawerOpen() ||
-      this.leaderboardsDrawer.isDrawerOpen();
+      this.leaderboardsDrawer.isDrawerOpen() ||
+      this.settingsDrawer.isDrawerOpen();
     const resultsBlocking = this.resultsOverlay?.isBlocking?.() || false;
     const menuOpen = (this.topBar as any)?.isMenuOpen?.() || false;
     return drawerOpen || resultsBlocking || menuOpen;

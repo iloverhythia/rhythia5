@@ -120,3 +120,5 @@ export function gameSettingToggle(
     ...overrides,
   };
 }
+
+export const settingsNavigation = { open: (id: string): void => {} };

@@ -42,6 +42,13 @@ import {
   SetTextureFilter,
   TEXTURE_FILTER_TRILINEAR,
   KEY_F5,
+  FLAG_VSYNC_HINT,
+  SetWindowState,
+  ClearWindowState,
+  SetWindowSize,
+  ToggleBorderlessWindowed,
+  IsWindowFocused,
+  MinimizeWindow,
 } from "raylib";
 
 import { state } from "./state";
@@ -49,6 +56,25 @@ import { logger } from "../../utils/logger";
 import { setDefaultFont } from "../../utils/text";
 import { initializeVolumes } from "../../utils/soundManager";
 import { restartAppInPlace } from "./scenes";
+import { ConfigManager } from "../../utils/configManager";
+
+let borderless = false;
+let wasFocused = true;
+
+export function applyWindowSettings(): void {
+  const mode = ConfigManager.getExtra<string>("windowMode", "windowed");
+  const [width, height] = ConfigManager.getExtra("resolution", "").split("x").map(Number);
+  if (IsWindowFullscreen() && mode !== "fullscreen") ToggleFullscreen();
+  if (borderless !== (mode === "borderless")) ToggleBorderlessWindowed();
+  borderless = mode === "borderless";
+  if (mode === "windowed" && width && height) SetWindowSize(width, height);
+  if (mode === "fullscreen" && !IsWindowFullscreen()) {
+    MaximizeWindow();
+    setTimeout(() => ToggleFullscreen(), 50);
+  }
+  if (ConfigManager.getExtra("vsync", false)) SetWindowState(FLAG_VSYNC_HINT);
+  else ClearWindowState(FLAG_VSYNC_HINT);
+}
 
 function releaseImage(image: any): void {
   try {
@@ -78,6 +104,7 @@ export function initializeWindow(config: any): void {
   SetWindowMonitor(state.targetMonitor);
   SetTargetFPS(5000);
   rlSetClipPlanes(0.01, 14000);
+  applyWindowSettings();
 }
 
 function loadBloomShader(): void {
@@ -135,6 +162,11 @@ export function updateWindowMetrics(): void {
 
 export function handleGlobalHotkeys(isFullscreen: boolean): void {
   const altPressed = IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT);
+  const focused = IsWindowFocused();
+  if (wasFocused && !focused && (isFullscreen || borderless) && ConfigManager.getExtra("minimizeOnAltTab", false)) {
+    MinimizeWindow();
+  }
+  wasFocused = focused;
   if (IsKeyPressed(KEY_GRAVE)) {
     state.debugMode = !state.debugMode;
   }

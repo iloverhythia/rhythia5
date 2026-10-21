@@ -13,6 +13,86 @@ interface KeybindsConfig {
   decreaseMouseSensitivity: string;
 }
 
+const KEY_CODES: Record<string, number> = {
+  KeyA: 65,
+  KeyB: 66,
+  KeyC: 67,
+  KeyD: 68,
+  KeyE: 69,
+  KeyF: 70,
+  KeyG: 71,
+  KeyH: 72,
+  KeyI: 73,
+  KeyJ: 74,
+  KeyK: 75,
+  KeyL: 76,
+  KeyM: 77,
+  KeyN: 78,
+  KeyO: 79,
+  KeyP: 80,
+  KeyQ: 81,
+  KeyR: 82,
+  KeyS: 83,
+  KeyT: 84,
+  KeyU: 85,
+  KeyV: 86,
+  KeyW: 87,
+  KeyX: 88,
+  KeyY: 89,
+  KeyZ: 90,
+
+  Digit0: 48,
+  Digit1: 49,
+  Digit2: 50,
+  Digit3: 51,
+  Digit4: 52,
+  Digit5: 53,
+  Digit6: 54,
+  Digit7: 55,
+  Digit8: 56,
+  Digit9: 57,
+
+  F1: 290,
+  F2: 291,
+  F3: 292,
+  F4: 293,
+  F5: 294,
+  F6: 295,
+  F7: 296,
+  F8: 297,
+  F9: 298,
+  F10: 299,
+  F11: 300,
+  F12: 301,
+
+  Space: 32,
+  Enter: 257,
+  Tab: 258,
+  Backspace: 259,
+  Escape: 256,
+  Delete: 261,
+  Insert: 260,
+  Home: 268,
+  End: 269,
+  PageUp: 266,
+  PageDown: 267,
+
+  ArrowUp: 265,
+  ArrowDown: 264,
+  ArrowLeft: 263,
+  ArrowRight: 262,
+
+  BracketLeft: 91,
+  BracketRight: 93,
+
+  ShiftLeft: 340,
+  ShiftRight: 344,
+  ControlLeft: 341,
+  ControlRight: 345,
+  AltLeft: 342,
+  AltRight: 346,
+};
+
 class KeybindsManager {
   private config: KeybindsConfig;
   private defaultConfig: KeybindsConfig = {
@@ -85,87 +165,11 @@ class KeybindsManager {
   }
 
   private keyNameToCode(keyName: string): number {
-    const keyMap: Record<string, number> = {
-      KeyA: 65,
-      KeyB: 66,
-      KeyC: 67,
-      KeyD: 68,
-      KeyE: 69,
-      KeyF: 70,
-      KeyG: 71,
-      KeyH: 72,
-      KeyI: 73,
-      KeyJ: 74,
-      KeyK: 75,
-      KeyL: 76,
-      KeyM: 77,
-      KeyN: 78,
-      KeyO: 79,
-      KeyP: 80,
-      KeyQ: 81,
-      KeyR: 82,
-      KeyS: 83,
-      KeyT: 84,
-      KeyU: 85,
-      KeyV: 86,
-      KeyW: 87,
-      KeyX: 88,
-      KeyY: 89,
-      KeyZ: 90,
+    return KEY_CODES[keyName] || 0;
+  }
 
-      Digit0: 48,
-      Digit1: 49,
-      Digit2: 50,
-      Digit3: 51,
-      Digit4: 52,
-      Digit5: 53,
-      Digit6: 54,
-      Digit7: 55,
-      Digit8: 56,
-      Digit9: 57,
-
-      F1: 290,
-      F2: 291,
-      F3: 292,
-      F4: 293,
-      F5: 294,
-      F6: 295,
-      F7: 296,
-      F8: 297,
-      F9: 298,
-      F10: 299,
-      F11: 300,
-      F12: 301,
-
-      Space: 32,
-      Enter: 257,
-      Tab: 258,
-      Backspace: 259,
-      Escape: 256,
-      Delete: 261,
-      Insert: 260,
-      Home: 268,
-      End: 269,
-      PageUp: 266,
-      PageDown: 267,
-
-      ArrowUp: 265,
-      ArrowDown: 264,
-      ArrowLeft: 263,
-      ArrowRight: 262,
-
-      BracketLeft: 91,
-      BracketRight: 93,
-
-      ShiftLeft: 340,
-      ShiftRight: 344,
-      ControlLeft: 341,
-      ControlRight: 345,
-      AltLeft: 342,
-      AltRight: 346,
-    };
-
-    return keyMap[keyName] || 0;
+  public getKeyName(code: number): string | undefined {
+    return Object.keys(KEY_CODES).find((name) => KEY_CODES[name] === code);
   }
 
   public getKeyDisplayName(keyName: string): string {
